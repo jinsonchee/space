@@ -12,6 +12,15 @@ if (!url) {
 }
 
 const sql = postgres(url, { max: 1, onnotice: () => {}, prepare: false });
+
+// Check (without printing the URL) that the app will use Supabase's transaction pooler.
+{
+  const u = new URL(url);
+  const pooler = u.hostname.endsWith(".pooler.supabase.com");
+  console.log(pooler && u.port === "6543"
+    ? "[migrate] DATABASE_URL: Supabase transaction pooler (port 6543) ✓"
+    : `[migrate] WARNING: DATABASE_URL is ${pooler ? `the Supabase pooler on port ${u.port || "default"}` : "not the Supabase pooler"} — use the transaction pooler (port 6543)`);
+}
 const dir = path.join(process.cwd(), "migrations");
 
 try {

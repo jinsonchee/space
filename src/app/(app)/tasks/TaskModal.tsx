@@ -5,6 +5,7 @@ import type { TaskRow, MemberLite, Label, GoalLite } from "@/lib/queries";
 import { saveTask, deleteTask, nudgeTask, createLabel } from "../../actions/tasks";
 import { Photo } from "@/components/Photo";
 import { I } from "@/components/Icons";
+import { STATUSES, PRIORITIES } from "@/lib/task-meta";
 
 const LABEL_COLORS = ["#8b5cf6", "#ff4fa3", "#ffb020", "#3b82f6", "#1ed760", "#22d3ee", "#ff6a3d"];
 
@@ -68,25 +69,35 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
           <span className="eyebrow">{task ? "Edit task" : "New task"}</span>
           <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label="Close"><I.x style={{ width: 16 }} /></button>
         </div>
-        <input className="input head" style={{ fontSize: 22, fontWeight: 600, background: "transparent", border: 0, padding: "4px 0", boxShadow: "none" }} placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!task} />
-        <textarea className="textarea" style={{ marginTop: 8 }} placeholder="Add details, links, references…" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <div className="field">
+          <label className="label" htmlFor="task-title">Task</label>
+          <input id="task-title" className="input" style={{ fontSize: 17, fontWeight: 600 }} placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!task} />
+        </div>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label className="label" htmlFor="task-details">Details <span className="faint">(optional)</span></label>
+          <textarea id="task-details" className="textarea" placeholder="Add details, links, references…" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
 
-        <div className="grid g-3" style={{ gap: 10, marginTop: 14 }}>
+        <div className="field" style={{ marginTop: 14 }}>
+          <span className="label">Status</span>
+          <div className="tag-pick" role="group" aria-label="Status">
+            {STATUSES.map((o) => (
+              <button key={o.key} type="button" className={`tag tag-${o.key}`} aria-pressed={status === o.key} onClick={() => setStatus(o.key)}>{o.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid g-2" style={{ gap: 10, marginTop: 14, alignItems: "end" }}>
           <div className="field">
-            <label className="label">Status</label>
-            <select className="select" value={status} onChange={(e) => setStatus(e.target.value as TaskRow["status"])}>
-              <option value="todo">To do</option><option value="doing">In progress</option><option value="done">Done</option>
-            </select>
+            <span className="label">Priority</span>
+            <div className="tag-pick" role="group" aria-label="Priority">
+              {PRIORITIES.map((o) => (
+                <button key={o.key} type="button" className={`tag tag-${o.key}`} aria-pressed={priority === o.key} onClick={() => setPriority(o.key)}>{o.label}</button>
+              ))}
+            </div>
           </div>
           <div className="field">
-            <label className="label">Priority</label>
-            <select className="select" value={priority} onChange={(e) => setPriority(e.target.value as TaskRow["priority"])}>
-              <option value="low">Low</option><option value="normal">Normal</option><option value="high">High !!</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="label">Due date</label>
-            <input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+            <label className="label" htmlFor="task-due">Due date</label>
+            <input id="task-due" className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </div>
         </div>
 
@@ -151,12 +162,13 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
         )}
 
         {msg && <p className="small" style={{ marginTop: 12, color: msg.bad ? "var(--danger)" : "var(--accent)" }}>{msg.text}</p>}
+        {!title.trim() && (description.trim() || assignees.length > 0) && <p className="small muted" style={{ marginTop: 12 }}>Add a name in the Task box at the top to create it.</p>}
 
         <div className="row between" style={{ marginTop: 20 }}>
           {task ? <button className="btn btn-ghost btn-danger btn-sm" onClick={remove} disabled={pending}><I.trash style={{ width: 15 }} /> Delete</button> : <span />}
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button className="btn btn-accent" onClick={save} disabled={pending || !title.trim()}>{pending ? "Saving…" : task ? "Save" : "Create task"}</button>
+            <button className="btn btn-accent" onClick={save} disabled={pending || !title.trim()} title={!title.trim() ? "Give the task a name first" : undefined}>{pending ? "Saving…" : task ? "Save" : "Create task"}</button>
           </div>
         </div>
       </div>

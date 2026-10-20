@@ -1,4 +1,4 @@
 {
-  "version": "1.2.0",
-  "notes": "Import your tasks straight from ClickUp (Tasks \u2192 Import from ClickUp)."
+  "version": "1.3.0",
+  "notes": "New colour-coded task statuses (In-queue, In-progress, On-hold, Complete) and priorities (Low, Normal, Urgent), a clearer New Task window, and fixes for slow loading and saving."
 }

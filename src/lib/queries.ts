@@ -1,12 +1,13 @@
 import "server-only";
 import { sql, type AvatarConfig } from "./db";
+import type { TaskStatus, TaskPriority } from "./task-meta";
 
 export type TaskRow = {
   id: string;
   title: string;
   description: string;
-  status: "todo" | "doing" | "done";
-  priority: "low" | "normal" | "high";
+  status: TaskStatus;
+  priority: TaskPriority;
   due_date: string | null;
   created_by: string | null;
   created_at: string;

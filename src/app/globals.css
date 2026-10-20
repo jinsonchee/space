@@ -24,6 +24,14 @@
   --danger: #ff5a5f;
   --warn: #ffb547;
   --shadow: 0 20px 50px rgba(0, 0, 0, .45);
+  /* task status + priority colours (contrast-checked on dark surfaces) */
+  --tone-queue: #a8a8b3;
+  --tone-progress: #6cb0ff;
+  --tone-hold: #fcd34d;
+  --tone-complete: #4ade80;
+  --tone-low: #a8a8b3;
+  --tone-normal: #ff9a9a;
+  --tone-urgent: #e0102e;
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -41,6 +49,14 @@
   --warn: #d98a00;
   --shadow: 0 20px 50px rgba(20, 20, 40, .12);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, white);
+  /* darker text tones so the same chips stay readable on light surfaces */
+  --tone-queue: #55555f;
+  --tone-progress: #1a4fb8;
+  --tone-hold: #7a4f00;
+  --tone-complete: #14653f;
+  --tone-low: #55555f;
+  --tone-normal: #a32e2e;
+  --tone-urgent: #d1102b;
   color-scheme: light;
 }
 
@@ -355,7 +371,7 @@ button, input, select, textarea { font: inherit; letter-spacing: inherit; color:
 .check:hover { border-color: var(--accent); }
 .check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); animation: pop .3s var(--ease); }
 .check svg { width: 14px; height: 14px; }
-.board { display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 14px; overflow-x: auto; padding-bottom: 6px; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 14px; overflow-x: auto; padding-bottom: 6px; }
 .board-col { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; min-height: 240px; }
 .board-col.drop { border-color: var(--accent); background: var(--accent-soft); }
 .board-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; cursor: grab; }
@@ -370,6 +386,24 @@ button, input, select, textarea { font: inherit; letter-spacing: inherit; color:
 .cal-task { font-size: 11.5px; font-weight: 600; padding: 3px 6px; border-radius: 6px; background: var(--accent-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 @media (max-width: 640px) { .cal-cell { min-height: 64px; } .cal-task { font-size: 0; height: 6px; padding: 0; } }
 .prio-high { color: var(--danger); }
+
+/* Status + priority tags: tinted chip in the tone colour; URGENT is a solid fill. */
+.tag { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em; white-space: nowrap;
+  color: var(--tone); background: color-mix(in srgb, var(--tone) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent); }
+.tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.tag-todo { --tone: var(--tone-queue); }
+.tag-doing { --tone: var(--tone-progress); }
+.tag-hold { --tone: var(--tone-hold); }
+.tag-done { --tone: var(--tone-complete); }
+.tag-low { --tone: var(--tone-low); }
+.tag-normal { --tone: var(--tone-normal); }
+.tag-high { --tone: var(--tone-urgent); color: #fff; background: var(--tone-urgent); border-color: var(--tone-urgent); }
+/* Picker version: unselected options are quiet; the chosen one lights up in its colour. */
+.tag-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-pick .tag { height: 32px; padding: 0 12px; cursor: pointer; font-family: inherit; }
+.tag-pick .tag[aria-pressed="false"] { color: var(--muted); background: transparent; border-color: var(--line-2); }
+.tag-pick .tag[aria-pressed="false"]::before { background: var(--tone); }
+.tag-pick .tag:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
 .overdue { color: var(--danger); font-weight: 700; }
 
 /* ---------- modal ---------- */

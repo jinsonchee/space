@@ -8,14 +8,11 @@ import { Photo } from "@/components/Photo";
 import { TaskModal } from "./TaskModal";
 import { ImportClickUp } from "./ImportClickUp";
 import { shortDay, addDays, mondayOf } from "@/lib/dates";
+import { STATUSES, priorityLabel, statusLabel } from "@/lib/task-meta";
 
 type View = "list" | "board" | "calendar";
 type Who = "all" | "mine" | "created";
-const COLS: { key: TaskRow["status"]; label: string; emoji: string }[] = [
-  { key: "todo", label: "To do", emoji: "📝" },
-  { key: "doing", label: "In progress", emoji: "🎧" },
-  { key: "done", label: "Done", emoji: "✅" },
-];
+const COLS = STATUSES;
 
 export default function TasksClient({ tasks, members, labels, goals, meId, isAdmin, today, openId }: { tasks: TaskRow[]; members: MemberLite[]; labels: Label[]; goals: GoalLite[]; meId: string; isAdmin: boolean; today: string; openId: string | null }) {
   const router = useRouter();
@@ -106,7 +103,7 @@ export default function TasksClient({ tasks, members, labels, goals, meId, isAdm
             if (!items.length) return null;
             return (
               <section key={c.key}>
-                <div className="eyebrow" style={{ marginBottom: 10 }}>{c.emoji} {c.label} · {items.length}</div>
+                <div className="row" style={{ gap: 8, marginBottom: 10 }}><span className={`tag tag-${c.key}`}>{c.label}</span><span className="small muted">{items.length}</span></div>
                 {items.map((t) => (
                   <TaskLine key={t.id} t={t} today={today} byId={byId} labelById={labelById} onOpen={() => setEditing(t)} onToggle={() => move(t.id, t.status === "done" ? "todo" : "done")} />
                 ))}
@@ -170,11 +167,11 @@ function TaskLine({ t, today, byId, labelById, onOpen, onToggle }: { t: TaskRow;
       </button>
       <div style={{ minWidth: 0 }}>
         <div className="row" style={{ gap: 8 }}>
-          {t.priority === "high" && !done && <span className="prio-high" title="High priority" style={{ fontWeight: 800 }}>!!</span>}
           <span className="task-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
         </div>
         <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
-          {t.status === "doing" && <span className="chip chip-accent">In progress</span>}
+          {!done && <span className={`tag tag-${t.priority}`} title="Priority">{priorityLabel(t.priority)}</span>}
+          {(t.status === "doing" || t.status === "hold") && <span className={`tag tag-${t.status}`}>{statusLabel(t.status)}</span>}
           {t.goal_id && <span className="chip" title="Counts toward a yearly goal" style={{ color: "var(--accent)" }}>◎ Goal</span>}
           <Labels ids={t.labels} labelById={labelById} />
           <Due d={t.due_date} today={today} done={done} />
@@ -200,13 +197,16 @@ function Board({ list, today, byId, labelById, onOpen, onMove }: { list: TaskRow
             onDrop={(e) => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData("text/plain"); if (id) onMove(id, c.key); }}
           >
             <div className="row between" style={{ padding: "2px 4px 12px" }}>
-              <span className="eyebrow">{c.emoji} {c.label}</span>
+              <span className={`tag tag-${c.key}`}>{c.label}</span>
               <span className="chip">{items.length}</span>
             </div>
             {items.map((t) => (
               <div key={t.id} className="board-card" draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", t.id)} onClick={() => onOpen(t)}>
-                <div className="task-title" style={{ fontSize: 14 }}>{t.priority === "high" && t.status !== "done" && <span className="prio-high">!! </span>}{t.title}</div>
-                <div className="row wrap" style={{ gap: 6, marginTop: 8 }}><Labels ids={t.labels} labelById={labelById} /></div>
+                <div className="task-title" style={{ fontSize: 14 }}>{t.title}</div>
+                <div className="row wrap" style={{ gap: 6, marginTop: 8 }}>
+                  {t.status !== "done" && <span className={`tag tag-${t.priority}`} title="Priority">{priorityLabel(t.priority)}</span>}
+                  <Labels ids={t.labels} labelById={labelById} />
+                </div>
                 <div className="row between" style={{ marginTop: 10 }}>
                   <Due d={t.due_date} today={today} done={t.status === "done"} />
                   <Assignees ids={t.assignees} byId={byId} />

@@ -40,14 +40,17 @@ export async function rememberedMemberId() {
 export async function currentMember(): Promise<Member | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
+  let sub: string | undefined;
   try {
-    const { payload } = await jwtVerify(token, secret());
-    if (!payload.sub) return null;
-    const rows = await sql<Member[]>`select ${memberCols} from members where id = ${payload.sub}`;
-    return rows[0] ?? null;
+    sub = (await jwtVerify(token, secret())).payload.sub;
   } catch {
-    return null;
+    return null; // bad or expired token = logged out
   }
+  if (!sub) return null;
+  // Database errors are thrown, not treated as "logged out" — otherwise / and /login
+  // bounce between each other forever when the database is briefly unavailable.
+  const rows = await sql<Member[]>`select ${memberCols} from members where id = ${sub}`;
+  return rows[0] ?? null;
 }
 
 export async function requireMember(): Promise<Member> {

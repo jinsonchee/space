@@ -7,6 +7,7 @@ import { PLATFORMS, compact } from "@/lib/levels";
 import { goalsWithProgress, streakFor, type GoalProgress } from "@/lib/goals";
 import { Character } from "@/components/Pixel";
 import { I } from "@/components/Icons";
+import { priorityLabel, statusLabel } from "@/lib/task-meta";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
 
@@ -225,9 +226,10 @@ export default async function Home() {
           myTasks.slice(0, 6).map((t) => (
             <Link key={t.id} href={`/tasks?open=${t.id}`} className="task-row" style={{ gridTemplateColumns: "1fr auto" }}>
               <div style={{ minWidth: 0 }}>
-                <div className="task-title">{t.priority === "high" && <span className="prio-high">!! </span>}{t.title}</div>
+                <div className="task-title">{t.title}</div>
                 <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
-                  {t.status === "doing" && <span className="chip chip-accent">In progress</span>}
+                  <span className={`tag tag-${t.priority}`} title="Priority">{priorityLabel(t.priority)}</span>
+                  {(t.status === "doing" || t.status === "hold") && <span className={`tag tag-${t.status}`}>{statusLabel(t.status)}</span>}
                   {t.goal_id && <span className="chip" style={{ color: "var(--accent)" }}>◎ Goal</span>}
                   {t.labels.map((l) => labelById[l] && <span key={l} className="chip"><span className="dot" style={{ background: labelById[l].color }} />{labelById[l].name}</span>)}
                 </div>

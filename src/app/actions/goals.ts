@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { sql } from "@/lib/db";
+import { sql, transaction } from "@/lib/db";
 import { requireAccess } from "@/lib/auth";
 import { isIsoDate } from "@/lib/dates";
 import { PLATFORMS } from "@/lib/levels";
@@ -32,7 +32,7 @@ export async function saveGoal(g: GoalInput) {
     target = Math.round(g.target_value);
   }
   const id = g.id && uuidRe.test(g.id) ? g.id : null;
-  await sql.begin(async (tx) => {
+  await transaction(async (tx) => {
     let goalId = id;
     if (goalId) {
       await tx`update goals set title = ${title}, kind = ${kind}, platform = ${platform}, target_value = ${target}, end_date = ${g.end_date} where id = ${goalId}`;

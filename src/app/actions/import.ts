@@ -78,7 +78,7 @@ export async function importClickUpCsv(text: string): Promise<ImportResult> {
     const title = (r[iName] ?? "").trim().slice(0, 200);
     if (!title) { skipped++; continue; }
     const statusRaw = (iStatus >= 0 ? r[iStatus] : "").toLowerCase();
-    const status = /complete|done|closed|finished/.test(statusRaw) ? "done" : /progress|review|doing|working/.test(statusRaw) ? "doing" : "todo";
+    const status = /complete|done|closed|finished/.test(statusRaw) ? "done" : /hold|block|wait|paus/.test(statusRaw) ? "hold" : /progress|review|doing|working/.test(statusRaw) ? "doing" : "todo";
     const prioRaw = (iPrio >= 0 ? r[iPrio] : "").toLowerCase();
     const priority = /urgent|high|1|2/.test(prioRaw) && !/low/.test(prioRaw) ? "high" : /low|4/.test(prioRaw) ? "low" : "normal";
     const due = iDue >= 0 ? toDate(r[iDue] ?? "") : null;

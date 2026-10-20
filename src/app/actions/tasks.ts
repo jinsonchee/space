@@ -1,25 +1,26 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { sql } from "@/lib/db";
+import { sql, transaction } from "@/lib/db";
 import { requireMember, atLeast } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { isIsoDate } from "@/lib/dates";
 import { isHex } from "@/lib/color";
+import type { TaskStatus, TaskPriority } from "@/lib/task-meta";
 
 export type TaskInput = {
   id?: string;
   title: string;
   description?: string;
-  status?: "todo" | "doing" | "done";
-  priority?: "low" | "normal" | "high";
+  status?: TaskStatus;
+  priority?: TaskPriority;
   due_date?: string | null;
   assignees?: string[];
   labels?: string[];
   goal_id?: string | null;
 };
 
-const STATUSES = ["todo", "doing", "done"] as const;
-const PRIOS = ["low", "normal", "high"] as const;
+const STATUSES: readonly TaskStatus[] = ["todo", "doing", "hold", "done"];
+const PRIOS: readonly TaskPriority[] = ["low", "normal", "high"];
 const uuidRe = /^[0-9a-f-]{36}$/i;
 const ids = (a: unknown) => (Array.isArray(a) ? a.filter((x): x is string => typeof x === "string" && uuidRe.test(x)) : []);
 
@@ -37,7 +38,7 @@ export async function saveTask(input: TaskInput) {
 
   let taskId = input.id && uuidRe.test(input.id) ? input.id : null;
   let previous: string[] = [];
-  await sql.begin(async (tx) => {
+  await transaction(async (tx) => {
     if (taskId) {
       previous = (await tx<{ member_id: string }[]>`select member_id from task_assignees where task_id = ${taskId}`).map((r) => r.member_id);
       await tx`
@@ -74,7 +75,7 @@ export async function saveTask(input: TaskInput) {
   return { ok: true as const, id: taskId! };
 }
 
-export async function setTaskStatus(id: string, status: "todo" | "doing" | "done") {
+export async function setTaskStatus(id: string, status: TaskStatus) {
   const me = await requireMember();
   if (!uuidRe.test(id) || !STATUSES.includes(status)) return;
   const [t] = await sql<{ title: string; created_by: string | null; status: string }[]>`select title, created_by, status from tasks where id = ${id}`;

@@ -1,7 +1,7 @@
 "use server";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import { sql, type AvatarConfig } from "@/lib/db";
+import { sql, transaction, type AvatarConfig } from "@/lib/db";
 import { createSession, destroySession, forgetDevice, clientIp } from "@/lib/auth";
 import { isHex } from "@/lib/color";
 import { presetFor } from "@/lib/characters";
@@ -39,7 +39,7 @@ export async function setupSpace(_: unknown, fd: FormData): Promise<Result> {
   const avatar: AvatarConfig = preset?.avatar ?? { pet: "dove", petName: "Pip" };
   const photo = preset?.photo ?? null;
   let id = "";
-  await sql.begin(async (tx) => {
+  await transaction(async (tx) => {
     await tx`insert into settings (id, artist_name, accent) values (1, ${artist}, ${isHex(accent) ? accent : "#fa243c"})`;
     const [m] = await tx<{ id: string }[]>`
       insert into members (name, email, role_label, access, pin_hash, avatar, photo)
