@@ -8,16 +8,23 @@ any access afterwards.** Neither of them is a developer: do all the work yoursel
 in one short line before each step, and only stop when a human has to sign in or click Authorize. When
 that happens, say exactly who should do it ("Artist: sign in with YOUR account…").
 
-Never print, log or write to disk the database URL or any generated secret, except where step 9 says to.
+Never print, log or write to disk the database URL, the database password or any generated secret.
+The only secret ever shown is the setup code, once, at the end of the launch script (step 5).
+
+**Never run `supabase` commands inside this repo** — they leave a `supabase/` folder behind. Always use a temp folder.
 
 ## 0. Ask (one message, then continue)
 - Artist name as it should appear (e.g. `LAYYI`).
 - Artist's email (they'll log in with it).
-- Artist's city → choose the nearest regions: Singapore/Malaysia → Supabase `ap-southeast-1`, Vercel `sin1`, timezone `Asia/Singapore`.
+- Artist's city → choose the nearest regions:
+  - Singapore/Malaysia → Supabase `ap-southeast-1`, Vercel `sin1`, timezone `Asia/Singapore`.
+  - Elsewhere: pick the closest pair, e.g. London → `eu-west-2` / `lhr1`; US East → `us-east-1` / `iad1`; US West → `us-west-1` / `sfo1`.
+  The database and the hosting **must** be in the same area, or setup and login will be very slow.
 
 ## 1. Tools
-Check `node -v` (≥ 20), `git`, `gh`. Use `npx --yes vercel@latest` and `npx --yes supabase@latest` (no global installs needed).
-Find the publisher repo from `git remote get-url origin` (e.g. `jinsonchee/space`). If there is no remote, stop and ask them to run `/publish-space` first.
+- Check `node -v` (≥ 20), `git`, `gh`. Use `npx --yes vercel@latest` and `npx --yes supabase@latest` (no global installs needed).
+- Find the publisher repo from `git remote get-url origin` (e.g. `jinsonchee/space`). If there is no remote, stop and ask them to run `/publish-space` first.
+- Install this repo's packages so the database setup script can run: `npm install`, then check `node -e 'import("postgres")'` succeeds. If it fails, fix it now — don't continue (the database step depends on it).
 
 ## 2. Artist's GitHub
 - Ask: "Artist, do you have a GitHub account? If not, create one now at github.com/signup (free) — tell me when done."
@@ -26,33 +33,62 @@ Find the publisher repo from `git remote get-url origin` (e.g. `jinsonchee/space
 - Fork: `gh repo fork jinsonchee/space --clone=false --default-branch-only`.
 - Turn on auto-updates in the fork: `gh workflow enable get-updates.yml -R <artist>/space` (if it errors because Actions are disabled on the fork, run `gh api -X PUT repos/<artist>/space/actions/permissions -F enabled=true -f allowed_actions=all` then retry).
 
-## 3. Secrets (generate, keep in memory only)
-`SESSION_SECRET` and `CRON_SECRET`: `openssl rand -hex 32` each. `SETUP_CODE`: two short words + 2 digits (e.g. `velvet-moon-42`). Database password: `openssl rand -base64 24 | tr -d '/+='`.
-
-## 4. Artist's Supabase (database)
+## 3. Sign the artist in to Supabase and Vercel (before anything is created)
+Do all the human sign-ins now, so the launch script in step 5 can run start to finish without stopping.
 - `npx --yes supabase@latest login` → **artist** signs in (GitHub sign-in is fine) and approves.
-- `npx --yes supabase@latest orgs list` → if none, ask the artist to create a free organisation at supabase.com/dashboard, then continue.
-- `npx --yes supabase@latest projects create "<artist name>-space" --org-id <org> --db-password <db password> --region ap-southeast-1` → note the project ref.
-- Wait until it's ready (poll `projects list` every 15 s, up to 5 min).
-- Get the **transaction pooler** connection string from the Supabase Management API: `GET https://api.supabase.com/v1/projects/<ref>/config/database/pooler` with the CLI's access token (it's stored by `supabase login`; on macOS also try the keychain entry "Supabase CLI"). Build `postgresql://postgres.<ref>:<db password>@<db_host>:6543/postgres`. If you can't get it automatically, ask the artist to open Supabase → their project → **Connect** → **Transaction pooler**, copy the string and paste it to you, then insert the password.
-- Sanity check without printing the URL: `DATABASE_URL=… node scripts/migrate.mjs` — it should print "applied 001…" and "database up to date".
-
-## 5. Artist's Vercel (hosting)
+- `npx --yes supabase@latest orgs list` → if none, ask the artist to create a free organisation at supabase.com/dashboard, then continue. Note the org id.
 - `npx --yes vercel@latest logout` (in case the publisher is signed in), then `npx --yes vercel@latest login` → **artist** signs up/signs in (Continue with GitHub is easiest, using their GitHub from step 2).
-- In a temp folder: `gh repo clone <artist>/space space-<artist>` and `cd` into it.
-- `npx --yes vercel@latest link --yes --project <artist>-space`.
-- `npx --yes vercel@latest git connect` → if it asks to install the Vercel GitHub app, the **artist** approves it for the `space` repo. This makes every update auto-deploy.
-- Add env vars for **production** by piping values on stdin (never as arguments):
-  `printf '%s' "$VALUE" | npx --yes vercel@latest env add NAME production` for `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `SETUP_CODE`, `UPDATE_FEED_URL` (= `https://raw.githubusercontent.com/jinsonchee/space/main/version.json`).
-- Deploy: `npx --yes vercel@latest deploy --prod --yes` → note the production URL.
-- `printf '%s' "https://<production domain>" | npx --yes vercel@latest env add APP_URL production`, then deploy again.
 
-## 6. Check it works
-- `curl -s -o /dev/null -w "%{http_code} %{redirect_url}" https://<domain>/` → expect a redirect to `/setup`.
-- `curl -s https://<domain>/api/cron -H "Authorization: Bearer $CRON_SECRET"` → expect `{"ok":true…}`.
+## 4. Prepare the artist's Vercel project (no secrets yet)
+- Make a temp folder outside this repo (`mktemp -d`) and clone into it: `gh repo clone <artist>/space <tmp>/space-<artist>`, then work inside that clone.
+- `npx --yes vercel@latest link --yes --project <artist>-space`. Note: this writes a `.env.local` with a Vercel login token into the clone — the clone **must** be deleted at the end (step 5's script does it; step 9 double-checks).
+- **Set the hosting region** (the old `vercel deploy --regions` flag no longer works and fails silently — functions would land in `iad1`, USA):
+  `echo '{"serverlessFunctionRegion":"sin1"}' | npx --yes vercel@latest api /v9/projects/<artist>-space -X PATCH --input -`
+  (use the Vercel region from step 0). Check it stuck: `npx --yes vercel@latest api /v9/projects/<artist>-space` should show `"serverlessFunctionRegion":"sin1"`.
+- `npx --yes vercel@latest git connect` → if it asks to install the Vercel GitHub app, the **artist** approves it for the `space` repo. This makes every update auto-deploy.
+
+## 5. The launch script (secrets → database → Vercel, in ONE run)
+Run everything below as **one bash script** in a single command, so the secrets only ever live in that
+script's memory. Write the script file to your scratchpad (it contains no secrets — they're generated
+when it runs) and run it with `bash`. Rules for the script:
+- Don't use `set -e`. Only the steps **before** the Supabase project exists may stop the script. Every step after that must **warn and continue**, so a late failure never loses the database password or the setup code.
+- Keep a list of warnings and print them at the end.
+- Use a `trap … EXIT` that deletes the temp folders (the clone from step 4 and the Supabase temp folder), so the clone's `.env.local` token is removed even if something fails.
+- Never `echo` the database URL or password, and never pass secrets as command arguments except `supabase link -p` (below).
+
+What the script does, in order:
+1. **Generate secrets** (fatal if this fails): `SESSION_SECRET` and `CRON_SECRET` = `openssl rand -hex 32` each; `SETUP_CODE` = two short words + 2 digits (e.g. `velvet-moon-42`); database password = `openssl rand -base64 24 | tr -d '/+='`.
+2. **Create the Supabase project** (fatal if this fails — nothing has been created yet):
+   `npx --yes supabase@latest projects create "<artist name>-space" --org-id <org> --db-password "$DB_PW" --region ap-southeast-1 >/dev/null 2>&1` (Supabase region from step 0).
+   **Don't** try to read the ref from this command's output (`-o json` gets warnings mixed into it and breaks).
+3. **Find the project ref by name**: run `npx --yes supabase@latest projects list -o json 2>/dev/null` and pick the entry whose `name` is `"<artist name>-space"` → its `id` is the ref (parse with `node`, starting from the first `[` in case anything else got printed). Retry every 10 s for up to 2 min. If it's still missing, warn: "project was created but I can't find it — the database password can be reset in Supabase → Project Settings → Database".
+4. **Wait until it's ready**: poll the same list every 15 s until that project's `status` is `ACTIVE_HEALTHY` (up to 5 min; warn and continue if not).
+5. **Get the pooler address** (don't read the CLI token from the keychain — it's blocked): make a second temp folder (`mktemp -d`), and run
+   `npx --yes supabase@latest link --project-ref "$REF" -p "$DB_PW" --workdir "$SB_TMP"`, then read `$SB_TMP/supabase/.temp/pooler-url`.
+   Take only the **host** from it and build the URL yourself, forcing the transaction-pooler port and the right username:
+   `DATABASE_URL="postgresql://postgres.$REF:$DB_PW@$HOST:6543/postgres"`.
+   If the file is missing, warn and fall back to `aws-0-<supabase region>.pooler.supabase.com` as the host.
+6. **Set up the database**: `(cd <this repo> && DATABASE_URL="$DATABASE_URL" node scripts/migrate.mjs)` — expect "applied 001…" and "database up to date". Warn on failure (Vercel's build runs migrations again anyway).
+7. **Add env vars to Vercel** (inside the clone from step 4), piping each value on stdin:
+   `printf '%s' "$VALUE" | npx --yes vercel@latest env add NAME production` for `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `SETUP_CODE`, `UPDATE_FEED_URL` (= `https://raw.githubusercontent.com/jinsonchee/space/main/version.json`). Warn on each failure, naming which one.
+8. **Deploy**: Vercel prints the URLs to stderr, so capture both:
+   `OUT=$(npx --yes vercel@latest deploy --prod --yes 2>&1)`, then take the production domain from the line containing `Aliased` (`grep -i aliased | grep -oE 'https://[^ ]+' | head -1`). If there's no such line, warn and fall back to `https://<artist>-space.vercel.app`. On failure, print the last ~20 lines of `$OUT` (it holds no secrets).
+9. **Set APP_URL**: `printf '%s' "https://<production domain>" | npx --yes vercel@latest env add APP_URL production`, then deploy again the same way.
+10. **Check it works** (warn only):
+    - `curl -s -o /dev/null -w "%{http_code} %{redirect_url}" https://<domain>/` → expect a redirect to `/setup`.
+    - `curl -s https://<domain>/api/cron -H "Authorization: Bearer $CRON_SECRET"` → expect `{"ok":true…}`.
+11. **Print the hand-over** — always, even if earlier steps warned: the link (`https://<domain>`), the setup code, and the list of warnings.
+
+After it runs, fix any warnings one by one (most can simply be re-run for the artist's project). If
+`DATABASE_URL` didn't make it into Vercel, reset the database password in Supabase → Project Settings →
+Database and add it again with a fresh pooler URL — never try to recover the old one.
+
+## 6. Speed check
+Open `https://<domain>/setup` once. If it takes more than a few seconds, the region probably didn't stick:
+re-run the region step from step 4 (in a fresh temp clone + `vercel link`), redeploy, then delete that clone.
 
 ## 7. Hand over
-Tell the artist (and only show these once):
+Using the script's output, tell the artist (and only show these once):
 - Their link: `https://<domain>`
 - Their setup code: `<SETUP_CODE>`
 - "Open the link on your phone or laptop, enter the setup code, type **<artist name>** as the artist name, your name, your email and a 6-digit PIN. Your character, photo and dove load automatically."
@@ -60,11 +96,15 @@ Tell the artist (and only show these once):
 - Suggest they store the setup code in their password manager (it's only needed once).
 
 ## 8. Optional email reminders
-Ask if they want reminder emails now. If yes: they sign up at resend.com, create an API key and paste it to you; add `RESEND_API_KEY` and `EMAIL_FROM` (`<Artist> 's Space <onboarding@resend.dev>` works for testing; their own domain later) with `vercel env add`, then redeploy.
+Ask if they want reminder emails now. If yes: they sign up at resend.com, create an API key and paste it to you.
+In a fresh temp folder (outside this repo): `gh repo clone <artist>/space`, `vercel link --yes --project <artist>-space`,
+add `RESEND_API_KEY` and `EMAIL_FROM` (`<Artist> 's Space <onboarding@resend.dev>` works for testing; their own domain later)
+with `printf '%s' … | vercel env add NAME production`, redeploy, then delete that folder.
 
 ## 9. Remove the publisher's access (do not skip)
 - `npx --yes vercel@latest logout`
 - `npx --yes supabase@latest logout`
 - `gh auth logout --hostname github.com --user <artist>` and `gh auth switch` back to the publisher.
-- Delete the temp clone folder (`space-<artist>`) and any `.vercel` folder inside it.
+- Make sure every temp clone (`space-<artist>`) and Supabase temp folder is gone — they contain a Vercel login token (`.env.local`) and `.vercel`/`supabase` folders. Delete any that are left.
+- Check this repo has no stray `supabase/` folder or `.vercel` folder (`git status` should be clean).
 - Confirm: "Done. Everything lives in <artist>'s accounts; this laptop no longer has access."
