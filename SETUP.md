@@ -17,7 +17,7 @@ Each step below is one action. Do them in order.
 ## Part 1: Get your copy of the code (GitHub)
 
 1. Go to **github.com** and sign up (or log in).
-2. Open the Space link you were sent (it looks like `github.com/<publisher>/space`).
+2. Open the Space link you were sent (it looks like `github.com/jinsonchee/space`).
 3. Click **Fork** (top right).
 4. Click **Create fork**.
 

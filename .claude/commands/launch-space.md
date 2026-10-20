@@ -17,13 +17,13 @@ Never print, log or write to disk the database URL or any generated secret, exce
 
 ## 1. Tools
 Check `node -v` (≥ 20), `git`, `gh`. Use `npx --yes vercel@latest` and `npx --yes supabase@latest` (no global installs needed).
-Find the publisher repo from `git remote get-url origin` (e.g. `<publisher>/space`). If there is no remote, stop and ask them to run `/publish-space` first.
+Find the publisher repo from `git remote get-url origin` (e.g. `jinsonchee/space`). If there is no remote, stop and ask them to run `/publish-space` first.
 
 ## 2. Artist's GitHub
 - Ask: "Artist, do you have a GitHub account? If not, create one now at github.com/signup (free) — tell me when done."
 - `gh auth login --hostname github.com --git-protocol https --web` → the **artist** approves in their browser (use their laptop if possible; otherwise they type their own password while you wait). gh keeps the publisher's account too; check with `gh auth status`.
 - `gh auth switch` to the artist's account. Get `<artist>` with `gh api user --jq .login`.
-- Fork: `gh repo fork <publisher>/space --clone=false --default-branch-only`.
+- Fork: `gh repo fork jinsonchee/space --clone=false --default-branch-only`.
 - Turn on auto-updates in the fork: `gh workflow enable get-updates.yml -R <artist>/space` (if it errors because Actions are disabled on the fork, run `gh api -X PUT repos/<artist>/space/actions/permissions -F enabled=true -f allowed_actions=all` then retry).
 
 ## 3. Secrets (generate, keep in memory only)
@@ -43,7 +43,7 @@ Find the publisher repo from `git remote get-url origin` (e.g. `<publisher>/spac
 - `npx --yes vercel@latest link --yes --project <artist>-space`.
 - `npx --yes vercel@latest git connect` → if it asks to install the Vercel GitHub app, the **artist** approves it for the `space` repo. This makes every update auto-deploy.
 - Add env vars for **production** by piping values on stdin (never as arguments):
-  `printf '%s' "$VALUE" | npx --yes vercel@latest env add NAME production` for `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `SETUP_CODE`, `UPDATE_FEED_URL` (= `https://raw.githubusercontent.com/<publisher>/space/main/version.json`).
+  `printf '%s' "$VALUE" | npx --yes vercel@latest env add NAME production` for `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `SETUP_CODE`, `UPDATE_FEED_URL` (= `https://raw.githubusercontent.com/jinsonchee/space/main/version.json`).
 - Deploy: `npx --yes vercel@latest deploy --prod --yes` → note the production URL.
 - `printf '%s' "https://<production domain>" | npx --yes vercel@latest env add APP_URL production`, then deploy again.
 
