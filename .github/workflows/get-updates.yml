@@ -1,0 +1,19 @@
+# Keeps this copy of Space up to date with the publisher's latest release.
+# Runs once a day (and on demand from the Actions tab). Only does anything in a fork.
+# Turn it on once: GitHub → your Space repo → Actions → "I understand… enable".
+name: Get Space updates
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 2am Malaysia/Singapore time
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sync:
+    if: github.event.repository.fork == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull the latest Space release from the publisher
+        run: gh repo sync "${{ github.repository }}" --branch main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
