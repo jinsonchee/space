@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSettings, sql, type AvatarConfig } from "@/lib/db";
-import { requireMember } from "@/lib/auth";
+import { requireMember, atLeast } from "@/lib/auth";
 import { Shell } from "@/components/Shell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { PetDock } from "@/components/PetDock";
@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <LoadingScreen logo={s.logo} artist={s.artist_name} pet={pet} />
-      <Shell artist={s.artist_name} logo={s.logo} me={{ name: me.name, role_label: me.role_label, photo: me.photo }}>
+      <Shell artist={s.artist_name} logo={s.logo} me={{ name: me.name, role_label: me.role_label, photo: me.photo }} isAdmin={atLeast(me, "admin")}>
         {children}
       </Shell>
       <PetDock pet={pet} petName={mascot.petName || DEFAULT_AVATAR.petName} />

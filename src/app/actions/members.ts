@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { sql, type AvatarConfig, type Access, type Member } from "@/lib/db";
 import { requireMember, atLeast } from "@/lib/auth";
 import { presetFor } from "@/lib/characters";
+import { NOTIFY_KINDS } from "@/lib/notify-prefs";
 
 const uuidRe = /^[0-9a-f-]{36}$/i;
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -131,4 +132,16 @@ export async function setTheme(theme: "light" | "dark") {
   if (!["light", "dark"].includes(theme)) return;
   await sql`update members set theme = ${theme} where id = ${me.id}`;
   revalidatePath("/", "layout");
+}
+
+/** My profile → Notifications: which notifications I get, and how. */
+export async function saveNotifyPrefs(prefs: Record<string, { app?: boolean; email?: boolean }>) {
+  const me = await requireMember();
+  const clean: Record<string, { app: boolean; email: boolean }> = {};
+  for (const k of NOTIFY_KINDS) {
+    const p = prefs?.[k.kind];
+    clean[k.kind] = { app: typeof p?.app === "boolean" ? p.app : k.app, email: typeof p?.email === "boolean" ? p.email : k.email };
+  }
+  await sql`update members set notify_prefs = ${sql.json(clean as never)} where id = ${me.id}`;
+  return { ok: true as const };
 }

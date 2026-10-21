@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireMember, atLeast } from "@/lib/auth";
 import { getSettings } from "@/lib/db";
 import { checkForUpdate } from "@/lib/version";
@@ -8,6 +9,7 @@ import { YouTubeCard } from "./YouTubeCard";
 
 export default async function SettingsPage() {
   const me = await requireMember();
+  if (!atLeast(me, "admin")) redirect("/profile"); // whole-Space settings are for the artist and admins
   const [s, update, yt] = await Promise.all([getSettings(), checkForUpdate(), getYouTube()]);
   return (
     <>

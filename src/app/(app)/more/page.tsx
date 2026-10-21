@@ -1,20 +1,23 @@
 import Link from "next/link";
 import { I } from "@/components/Icons";
+import { requireMember, atLeast } from "@/lib/auth";
 
 const ITEMS = [
-  { href: "/inbox", label: "Inbox & Calendar", icon: "inbox", soon: true },
+  { href: "/inbox", label: "Inbox", icon: "inbox" },
   { href: "/trends", label: "Daily Trends", icon: "trends", soon: true },
   { href: "/socials", label: "Post Stats", icon: "socials", soon: true },
   { href: "/profile", label: "My profile", icon: "user" },
-  { href: "/settings", label: "Settings", icon: "settings" },
+  { href: "/settings", label: "Settings", icon: "settings", adminOnly: true },
 ] as const;
 
-export default function More() {
+export default async function More() {
+  const me = await requireMember();
+  const isAdmin = atLeast(me, "admin");
   return (
     <>
       <div className="page-head"><h1>More</h1></div>
       <div className="card" style={{ padding: 8 }}>
-        {ITEMS.map((i) => {
+        {ITEMS.filter((i) => !("adminOnly" in i) || isAdmin).map((i) => {
           const Icon = I[i.icon];
           return (
             <Link key={i.href} href={i.href} className="nav-link" style={{ height: 52, color: "var(--text)" }}>

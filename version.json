@@ -1,4 +1,4 @@
 {
-  "version": "1.6.0",
-  "notes": "YouTube subscribers now update automatically every day (link your channel in Settings → YouTube stats). Emails you open in Space are marked as read in Gmail — turn it on in My profile → Google."
+  "version": "1.7.0",
+  "notes": "Your Inbox now works like a full email app: folders and labels, search, select emails to archive, delete, star or mark read (with Undo), compose new emails, forward, drafts that save themselves, an email signature, and Undo send. Plus: choose which notifications you get, and how, in My profile → Notifications."
 }

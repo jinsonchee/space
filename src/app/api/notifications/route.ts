@@ -9,8 +9,8 @@ export async function GET() {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const items = await sql`
     select id, kind, title, body, link, read_at, created_at from notifications
-    where member_id = ${me.id} order by created_at desc limit 25`;
-  const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from notifications where member_id = ${me.id} and read_at is null`;
+    where member_id = ${me.id} and not hidden order by created_at desc limit 25`;
+  const [{ n }] = await sql<{ n: number }[]>`select count(*)::int as n from notifications where member_id = ${me.id} and read_at is null and not hidden`;
   return NextResponse.json({ items, unread: n });
 }
 

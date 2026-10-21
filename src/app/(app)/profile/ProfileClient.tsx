@@ -7,8 +7,10 @@ import { changeMyPin, setTheme } from "../../actions/members";
 import { logout } from "../../actions/auth";
 import { I } from "@/components/Icons";
 import { GoogleCard, type GoogleInfo } from "./GoogleCard";
+import { NotificationsCard } from "./NotificationsCard";
+import type { NotifyPrefs } from "@/lib/notify-prefs";
 
-export default function ProfileClient({ me, google, googleResult }: { me: Member; google: GoogleInfo; googleResult: string | null }) {
+export default function ProfileClient({ me, google, googleResult, notify }: { me: Member; google: GoogleInfo; googleResult: string | null; notify: { prefs: NotifyPrefs; emailOn: boolean } }) {
   const [pending, start] = useTransition();
   const [pins, setPins] = useState({ cur: "", next: "", again: "" });
   const [pinMsg, setPinMsg] = useState<{ t: string; bad?: boolean } | null>(null);
@@ -44,6 +46,7 @@ export default function ProfileClient({ me, google, googleResult }: { me: Member
 
           <div className="col" style={{ gap: 16 }}>
             <GoogleCard info={google} result={googleResult} />
+            <NotificationsCard prefs={notify.prefs} emailOn={notify.emailOn} />
 
             <section className="card">
               <h2 style={{ marginBottom: 14 }}>Appearance</h2>

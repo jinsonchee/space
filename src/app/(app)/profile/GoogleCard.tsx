@@ -1,8 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
 import { disconnectCalendar, turnOffGoogleFeature } from "../../actions/calendar";
+import { saveSignature } from "../../actions/gmail";
 
-export type GoogleInfo = { configured: boolean; email: string | null; status: "ok" | "expired" | null; features: ("calendar" | "gmail")[]; canMarkRead: boolean };
+export type GoogleInfo = { configured: boolean; email: string | null; status: "ok" | "expired" | null; features: ("calendar" | "gmail")[]; canMarkRead: boolean; signature: string };
 
 const RESULT: Record<string, { text: string; bad?: boolean; info?: boolean }> = {
   connected: { text: "Connected! ✓" },
@@ -23,6 +24,9 @@ export function GoogleCard({ info, result }: { info: GoogleInfo; result: string 
   const [status, setStatus] = useState(info.status);
   const msg = result ? RESULT[result] : null;
   const connected = status !== null && features.length > 0;
+  const [sig, setSig] = useState(info.signature);
+  const [sigSaved, setSigSaved] = useState(false);
+  const [savedSig, setSavedSig] = useState(info.signature);
 
   return (
     <section className="card" id="google">
@@ -65,6 +69,17 @@ export function GoogleCard({ info, result }: { info: GoogleInfo; result: string 
               );
             })}
           </div>
+          {features.includes("gmail") && (
+            <div className="field" style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+              <label className="label" htmlFor="email-sig">Email signature</label>
+              <textarea id="email-sig" className="textarea" rows={3} value={sig} onChange={(e) => { setSig(e.target.value); setSigSaved(false); }} placeholder={"LAYYI\nSinger-songwriter · layyi.com"} />
+              <div className="row" style={{ gap: 10, marginTop: 6 }}>
+                <button className="btn btn-sm" disabled={pending || sig === savedSig} onClick={() => start(async () => { await saveSignature(sig); setSavedSig(sig); setSigSaved(true); })}>Save signature</button>
+                {sigSaved && <span className="small" style={{ color: "var(--success)" }}>Saved ✓</span>}
+                <span className="tiny muted">Added under emails you write in Space.</span>
+              </div>
+            </div>
+          )}
           {connected ? (
             <div className="row between wrap" style={{ gap: 10, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
               <span className="small">Connected{info.email ? <> as <strong>{info.email}</strong></> : null}</span>

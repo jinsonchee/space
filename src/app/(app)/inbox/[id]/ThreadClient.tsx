@@ -2,32 +2,39 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Message } from "@/lib/gmail";
+import type { Attachment, GLabel, Message } from "@/lib/gmail";
 import type { MemberLite, Label, GoalLite } from "@/lib/queries";
-import { sendGmailReply } from "../../../actions/gmail";
+import { threadAction, discardMailDraft } from "../../../actions/gmail";
 import { TaskModal } from "../../tasks/TaskModal";
+import { Composer, esc, kb, type ComposeInit } from "../Composer";
+import { UNDO_KEY } from "../InboxClient";
 import { I } from "@/components/Icons";
 import { PREVIEWABLE } from "@/lib/preview";
-import type { Attachment } from "@/lib/gmail";
 
 type Msg = Message & { when: string };
-const MAX = 4 * 1024 * 1024;
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const addrEmail = (a: string) => (a.match(/<([^>]+)>/)?.[1] ?? a).trim().toLowerCase();
 const splitAddrs = (v: string) => v.split(",").map((x) => x.trim()).filter(Boolean);
-const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+const LEAVE: Record<string, string> = { archive: "Archived", trash: "Moved to Trash", spam: "Reported as spam", untrash: "Restored", notspam: "Moved to Inbox", inbox: "Moved to Inbox" };
 
-export default function ThreadClient({ threadId, subject, messages, account, gmailUrl, members, labels, goals, meId }: {
-  threadId: string; subject: string; messages: Msg[]; account: string | null; gmailUrl: string;
+export default function ThreadClient({ threadId, subject, messages, threadLabels, mailLabels, account, gmailUrl, signature, members, labels, goals, meId }: {
+  threadId: string; subject: string; messages: Msg[]; threadLabels: string[]; mailLabels: GLabel[]; account: string | null; gmailUrl: string; signature: string;
   members: MemberLite[]; labels: Label[]; goals: GoalLite[]; meId: string;
 }) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set([messages[messages.length - 1]?.id]));
-  const [reply, setReply] = useState<"reply" | "all" | null>(null);
+  const router = useRouter();
+  const sent = messages.filter((m) => !m.draftId);
+  const drafts = messages.filter((m) => m.draftId);
+  const [open, setOpen] = useState<Set<string>>(() => new Set([sent[sent.length - 1]?.id]));
+  const [compose, setCompose] = useState<ComposeInit | null>(null);
   const [task, setTask] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ t: string; bad?: boolean } | null>(null);
   const [preview, setPreview] = useState<Attachment | null>(null);
-  const last = messages[messages.length - 1];
+  const [starred, setStarred] = useState(threadLabels.includes("STARRED"));
+  const [pending, start] = useTransition();
+  const last = sent[sent.length - 1] ?? messages[messages.length - 1];
   const me = account?.toLowerCase() ?? "";
+  const inTrash = threadLabels.includes("TRASH");
+  const inSpam = threadLabels.includes("SPAM");
+  const inInbox = threadLabels.includes("INBOX");
 
   // Who a reply goes to: the sender (or Reply-To); if I sent the last one, the people I wrote to.
   const recipients = (all: boolean) => {
@@ -37,22 +44,68 @@ export default function ThreadClient({ threadId, subject, messages, account, gma
     const seen = new Set(to.map(addrEmail));
     return { to: to.join(", "), cc: cc.filter((a) => { const e = addrEmail(a); if (e === me || seen.has(e)) return false; seen.add(e); return true; }).join(", ") };
   };
+  const quote = { when: last.when, from: last.from, fromEmail: last.fromEmail, text: last.text };
+  const reSubject = /^re:/i.test(subject) ? subject : `Re: ${subject}`;
+  const replyInit = (all: boolean): ComposeInit => ({ mode: all ? "all" : "reply", ...recipients(all), subject: reSubject, threadId, inReplyTo: last.messageIdHeader, references: last.references, quote });
+  const forwardInit = (): ComposeInit => ({
+    mode: "forward",
+    subject: /^fwd?:/i.test(subject) ? subject : `Fwd: ${subject}`,
+    html: `<br><div>---------- Forwarded message ---------<br>From: ${esc(last.from)} &lt;${esc(last.fromEmail)}&gt;<br>Date: ${esc(last.when)}<br>Subject: ${esc(subject)}<br>To: ${esc(last.to)}</div><br><div>${esc(last.text).replace(/\n/g, "<br>")}</div>`,
+    forwardFrom: `${threadId}:${last.id}`,
+    forwardCount: last.attachments.length,
+  });
+  const draftInit = (d: Msg): ComposeInit => ({ mode: "draft", to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, html: d.html ?? esc(d.text).replace(/\n/g, "<br>"), threadId, draftId: d.draftId, inReplyTo: last.messageIdHeader, references: last.references });
+
+  const act = (action: string) => start(async () => {
+    const r = await threadAction([threadId], action);
+    if (!r.ok) return setNote({ t: r.error, bad: true });
+    if (LEAVE[action] && action !== "untrash" && action !== "notspam" && action !== "inbox") {
+      // Leave the conversation and show Undo on the Inbox page.
+      try { sessionStorage.setItem(UNDO_KEY, JSON.stringify({ text: LEAVE[action], ids: [threadId], undo: r.undo })); } catch {}
+      router.push("/inbox");
+      return;
+    }
+    if (action.startsWith("label:")) {
+      try { sessionStorage.setItem(UNDO_KEY, JSON.stringify({ text: `Moved to ${mailLabels.find((l) => l.id === action.slice(6))?.name ?? "label"}`, ids: [threadId], undo: r.undo })); } catch {}
+      router.push("/inbox");
+      return;
+    }
+    if (action === "unread") { router.push("/inbox"); return; }
+    if (action === "star" || action === "unstar") setStarred(action === "star");
+    setNote({ t: LEAVE[action] ?? "Done ✓" });
+    router.refresh();
+  });
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head" style={{ alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <Link href="/inbox" className="btn btn-sm btn-ghost" style={{ marginBottom: 8 }}><I.left style={{ width: 16 }} /> Inbox</Link>
           <h1 style={{ fontSize: 26 }}>{subject}</h1>
         </div>
-        <div className="row wrap" style={{ gap: 8 }}>
-          <button className="btn btn-sm" onClick={() => setTask(true)}><I.tasks style={{ width: 15 }} /> Make a task</button>
-          <a className="btn btn-sm" href={gmailUrl} target="_blank" rel="noreferrer">Open in Gmail</a>
-        </div>
       </div>
-      {note && <p className="small" style={{ color: "var(--success)", marginBottom: 12 }}>{note}</p>}
 
-      {messages.map((m) => {
+      <div className="card mail-toolbar" style={{ marginBottom: 12, flexWrap: "wrap", gap: 6, borderBottom: 0 }}>
+        {inTrash ? <button className="btn btn-sm" disabled={pending} onClick={() => act("untrash")}>Restore</button> : <>
+          {inInbox ? <button className="btn btn-sm" disabled={pending} onClick={() => act("archive")}>Archive</button> : !inSpam && <button className="btn btn-sm" disabled={pending} onClick={() => act("inbox")}>Move to Inbox</button>}
+          <button className="btn btn-sm" disabled={pending} onClick={() => act("trash")}><I.trash style={{ width: 14 }} /> Delete</button>
+        </>}
+        <button className="btn btn-sm" disabled={pending} onClick={() => act("unread")}>Mark unread</button>
+        <button className="btn btn-sm" disabled={pending} onClick={() => act(starred ? "unstar" : "star")}>{starred ? "★ Starred" : "☆ Star"}</button>
+        {mailLabels.length > 0 && (
+          <select className="select" style={{ height: 32, width: "auto", padding: "0 10px" }} value="" aria-label="Move to label" disabled={pending} onChange={(e) => e.target.value && act(`label:${e.target.value}`)}>
+            <option value="">Move to…</option>
+            {mailLabels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        )}
+        {inSpam ? <button className="btn btn-sm" disabled={pending} onClick={() => act("notspam")}>Not spam</button> : !inTrash && <button className="btn btn-sm" disabled={pending} onClick={() => act("spam")}>Spam</button>}
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-sm" onClick={() => setTask(true)}><I.tasks style={{ width: 15 }} /> Make a task</button>
+        <a className="btn btn-sm btn-ghost" href={gmailUrl} target="_blank" rel="noreferrer">Open in Gmail</a>
+      </div>
+      {note && <p className="small" style={{ color: note.bad ? "var(--danger)" : "var(--success)", marginBottom: 12 }}>{note.t}</p>}
+
+      {sent.map((m) => {
         const isOpen = open.has(m.id);
         return (
           <section key={m.id} className="card mail-msg">
@@ -83,22 +136,33 @@ export default function ThreadClient({ threadId, subject, messages, account, gma
         );
       })}
 
+      {drafts.map((d) => compose?.draftId === d.draftId ? null : (
+        <section key={d.id} className="card mail-msg" style={{ borderStyle: "dashed" }}>
+          <div className="row between wrap" style={{ gap: 10 }}>
+            <span className="small"><strong style={{ color: "var(--danger)" }}>Draft</strong> <span className="muted">{d.text.slice(0, 120) || "(empty)"}</span></span>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm btn-accent" onClick={() => setCompose(draftInit(d))}>Continue editing</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => start(async () => { if (d.draftId) await discardMailDraft(d.draftId); router.refresh(); })}>Discard</button>
+            </div>
+          </div>
+        </section>
+      ))}
+
       <div style={{ marginTop: 14 }}>
-        {reply ? (
+        {compose ? (
           <Composer
-            key={reply}
-            threadId={threadId}
-            subject={/^re:/i.test(subject) ? subject : `Re: ${subject}`}
-            {...recipients(reply === "all")}
-            last={last}
+            key={`${compose.mode}-${compose.draftId ?? ""}`}
+            init={compose}
+            signature={signature}
             gmailUrl={gmailUrl}
-            onClose={() => setReply(null)}
-            onSent={() => { setReply(null); setNote("Sent from your Gmail ✓"); }}
+            onClose={() => setCompose(null)}
+            onSent={(t) => { setCompose(null); setNote({ t }); }}
           />
-        ) : (
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn-accent" onClick={() => setReply("reply")}>Reply</button>
-            {(splitAddrs(last.to).length + splitAddrs(last.cc).length > 1) && <button className="btn" onClick={() => setReply("all")}>Reply all</button>}
+        ) : sent.length > 0 && (
+          <div className="row wrap" style={{ gap: 8 }}>
+            <button className="btn btn-accent" onClick={() => setCompose(replyInit(false))}>Reply</button>
+            {(splitAddrs(last.to).length + splitAddrs(last.cc).length > 1) && <button className="btn" onClick={() => setCompose(replyInit(true))}>Reply all</button>}
+            <button className="btn" onClick={() => setCompose(forwardInit())}>Forward</button>
           </div>
         )}
       </div>
@@ -111,7 +175,7 @@ export default function ThreadClient({ threadId, subject, messages, account, gma
           draft={{ title: subject.replace(/^(re|fwd?):\s*/i, ""), description: `From: ${last.from} <${last.fromEmail}>\nOpen the email: ${gmailUrl}\n\n${last.text.slice(0, 600)}` }}
           members={members} labels={labels} goals={goals} meId={meId}
           onClose={() => setTask(false)}
-          onSaved={() => setNote("Task created ✓ It's on the Tasks page.")}
+          onSaved={() => setNote({ t: "Task created ✓ It's on the Tasks page." })}
         />
       )}
     </>
@@ -157,101 +221,3 @@ function PreviewModal({ a, onClose }: { a: Attachment; onClose: () => void }) {
   );
 }
 
-type Picked = { id: number; file: File; ready: boolean };
-
-function Composer({ threadId, subject, to: initialTo, cc: initialCc, last, gmailUrl, onClose, onSent }: {
-  threadId: string; subject: string; to: string; cc: string; last: Msg; gmailUrl: string; onClose: () => void; onSent: () => void;
-}) {
-  const router = useRouter();
-  const editor = useRef<HTMLDivElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [to, setTo] = useState(initialTo);
-  const [cc, setCc] = useState(initialCc);
-  const [files, setFiles] = useState<Picked[]>([]);
-  const [quote, setQuote] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const total = files.reduce((n, f) => n + f.file.size, 0);
-  const tooBig = total > MAX;
-  const reading = files.some((f) => !f.ready);
-  const cmd = (c: string, v?: string) => { editor.current?.focus(); document.execCommand(c, false, v); };
-  const keep = (e: React.MouseEvent) => e.preventDefault(); // keep the text selection when clicking a format button
-
-  // A file shows "Attached ✓" once it has been fully read and is ready to send.
-  const addFiles = (list: FileList | null) => {
-    Array.from(list ?? []).forEach((file) => {
-      const id = Math.random();
-      setFiles((f) => [...f, { id, file, ready: false }]);
-      file.arrayBuffer().then(() => setFiles((f) => f.map((x) => (x.id === id ? { ...x, ready: true } : x))));
-    });
-  };
-
-  const send = () => start(async () => {
-    setErr(null);
-    const body = editor.current;
-    if (!body || !body.innerText.trim()) return setErr("Write something first.");
-    if (tooBig) return setErr("Attachments are over 4 MB.");
-    const quoteText = quote ? `\n\nOn ${last.when}, ${last.from} <${last.fromEmail}> wrote:\n${last.text.split("\n").map((l) => `> ${l}`).join("\n")}` : "";
-    const quoteHtml = quote ? `<br><div>On ${esc(last.when)}, ${esc(last.from)} &lt;${esc(last.fromEmail)}&gt; wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${esc(last.text).replace(/\n/g, "<br>")}</blockquote>` : "";
-    const fd = new FormData();
-    fd.set("threadId", threadId); fd.set("to", to); fd.set("cc", cc); fd.set("subject", subject);
-    fd.set("html", `<div>${body.innerHTML}</div>${quoteHtml}`); fd.set("text", body.innerText + quoteText);
-    fd.set("inReplyTo", last.messageIdHeader); fd.set("references", last.references);
-    files.forEach((f) => fd.append("files", f.file));
-    const r = await sendGmailReply(fd);
-    if (!r.ok) return setErr(r.error);
-    router.refresh();
-    onSent();
-  });
-
-  return (
-    <section className="card composer">
-      <div className="col" style={{ gap: 6, marginBottom: 8 }}>
-        <label className="row small" style={{ gap: 8 }}><span className="muted" style={{ width: 28 }}>To</span><input className="input" style={{ height: 36 }} value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        <label className="row small" style={{ gap: 8 }}><span className="muted" style={{ width: 28 }}>Cc</span><input className="input" style={{ height: 36 }} value={cc} onChange={(e) => setCc(e.target.value)} placeholder="Optional" /></label>
-      </div>
-
-      <div ref={editor} className="editor" contentEditable={!pending} suppressContentEditableWarning data-placeholder="Write your reply…" role="textbox" aria-multiline="true" aria-label="Reply" />
-
-      {files.length > 0 && (
-        <div className="col" style={{ gap: 6, marginTop: 10 }}>
-          {files.map((f) => (
-            <div key={f.id} className="attach-row">
-              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {f.file.name} <span className="faint">{kb(f.file.size)}</span></span>
-              <span className="small" style={{ color: pending ? "var(--muted)" : f.ready ? "var(--success)" : "var(--muted)", whiteSpace: "nowrap" }}>
-                {pending ? "Sending…" : f.ready ? "✓ Attached" : "Adding…"}
-              </span>
-              {!pending && <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))} aria-label={`Remove ${f.file.name}`}><I.x style={{ width: 14 }} /></button>}
-            </div>
-          ))}
-          <span className="tiny" style={{ color: tooBig ? "var(--danger)" : "var(--muted)" }}>{kb(total)} of 4 MB</span>
-        </div>
-      )}
-      {tooBig && <p className="small" style={{ marginTop: 8, color: "var(--danger)" }}>Too big for Space (4 MB max). Remove a file, or <a href={gmailUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>send this reply from Gmail</a>.</p>}
-      {err && <p className="small" style={{ marginTop: 8, color: "var(--danger)" }}>{err}</p>}
-
-      {/* Like Gmail: formatting just under the text, then Send + attach/link together, discard on the right. */}
-      <div className="editor-bar" role="toolbar" aria-label="Formatting">
-        <button type="button" onMouseDown={keep} onClick={() => cmd("bold")} aria-label="Bold" title="Bold"><b>B</b></button>
-        <button type="button" onMouseDown={keep} onClick={() => cmd("italic")} aria-label="Italic" title="Italic"><i>I</i></button>
-        <button type="button" onMouseDown={keep} onClick={() => cmd("underline")} aria-label="Underline" title="Underline"><u>U</u></button>
-        <span className="editor-sep" />
-        <button type="button" onMouseDown={keep} onClick={() => cmd("insertUnorderedList")} aria-label="Bulleted list" title="Bulleted list">• ≡</button>
-        <button type="button" onMouseDown={keep} onClick={() => cmd("insertOrderedList")} aria-label="Numbered list" title="Numbered list">1. ≡</button>
-      </div>
-      <div className="row between wrap" style={{ gap: 8, marginTop: 10 }}>
-        <div className="row" style={{ gap: 4 }}>
-          <button className="btn btn-accent" onClick={send} disabled={pending || tooBig || reading}>{pending ? "Sending…" : "Send"}</button>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={() => fileInput.current?.click()} disabled={pending} aria-label="Attach files" title="Attach files">📎</button>
-          <button type="button" className="btn btn-ghost btn-icon" onMouseDown={keep} disabled={pending} aria-label="Insert link" title="Insert link"
-            onClick={() => { const u = prompt("Link address (https://…)"); if (u && /^(https?:|mailto:)/i.test(u)) cmd("createLink", u); }}>🔗</button>
-          <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-          <label className="row tiny muted" style={{ gap: 6, marginLeft: 8, cursor: "pointer" }}>
-            <input type="checkbox" checked={quote} onChange={(e) => setQuote(e.target.checked)} /> Include the previous email
-          </label>
-        </div>
-        <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} disabled={pending} aria-label="Discard reply" title="Discard reply"><I.trash style={{ width: 16 }} /></button>
-      </div>
-    </section>
-  );
-}

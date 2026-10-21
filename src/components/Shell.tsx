@@ -16,7 +16,7 @@ export const NAV: NavItem[] = [
 ];
 const NAV2: NavItem[] = [
   { href: "/team", label: "Team", icon: "team" },
-  { href: "/settings", label: "Settings", icon: "settings" },
+  { href: "/settings", label: "Settings", icon: "settings", adminOnly: true }, // whole-Space settings: artist + admins
 ];
 const TABS: NavItem[] = [
   { href: "/", label: "Home", icon: "home" },
@@ -30,7 +30,7 @@ function active(path: string, href: string) {
   return href === "/" ? path === "/" : path.startsWith(href);
 }
 
-export function Shell({ artist, logo, me, children }: { artist: string; logo: string | null; me: { name: string; role_label: string; photo: string | null }; children: React.ReactNode }) {
+export function Shell({ artist, logo, me, isAdmin, children }: { artist: string; logo: string | null; me: { name: string; role_label: string; photo: string | null }; isAdmin: boolean; children: React.ReactNode }) {
   const path = usePathname();
   const Brand = (
     <Link href="/" className="brand-mark" aria-label={`${artist}'s Space`}>
@@ -55,7 +55,7 @@ export function Shell({ artist, logo, me, children }: { artist: string; logo: st
         <div className="brand">{Brand}</div>
         {NAV.map(link)}
         <div className="nav-sep" />
-        {NAV2.map(link)}
+        {NAV2.filter((n) => !n.adminOnly || isAdmin).map(link)}
         <div className="sidebar-foot">
           <Link href="/profile" className="me-card">
             <Photo src={me.photo} name={me.name} size={36} />

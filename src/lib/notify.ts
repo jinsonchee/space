@@ -1,5 +1,6 @@
 import "server-only";
 import { sql, getSettings } from "./db";
+import { wants, type NotifyPrefs } from "./notify-prefs";
 
 type Note = {
   memberId: string;
@@ -11,15 +12,25 @@ type Note = {
   email?: boolean; // also send by email when email is configured
 };
 
-/** Creates an in-app notification (delivered by the pet) and optionally emails it. */
+/**
+ * Creates an in-app notification (delivered by the pet) and optionally emails it — following the
+ * person's own choices in My profile → Notifications. `email` is the sender's intent: for a nudge
+ * it's whether the teammate picked "App + email"; for other kinds it's the default.
+ */
 export async function notify(n: Note) {
+  const [m] = await sql<{ notify_prefs: NotifyPrefs }[]>`select notify_prefs from members where id = ${n.memberId}`;
+  const prefs = m?.notify_prefs ?? {};
+  const app = wants(prefs, n.kind, "app");
+  const email = n.kind === "nudge" ? Boolean(n.email) && wants(prefs, n.kind, "email") : prefs[n.kind]?.email ?? Boolean(n.email);
+  if (!app && !email) return false;
+  // Still recorded when the dove is off (hidden), so the same reminder isn't sent twice.
   const rows = await sql`
-    insert into notifications (member_id, kind, title, body, link, dedupe_key)
-    values (${n.memberId}, ${n.kind}, ${n.title}, ${n.body ?? ""}, ${n.link ?? null}, ${n.dedupeKey ?? null})
+    insert into notifications (member_id, kind, title, body, link, dedupe_key, hidden, read_at)
+    values (${n.memberId}, ${n.kind}, ${n.title}, ${n.body ?? ""}, ${n.link ?? null}, ${n.dedupeKey ?? null}, ${!app}, ${app ? null : new Date()})
     on conflict (member_id, dedupe_key) do nothing
     returning id`;
   if (rows.length === 0) return false; // already sent
-  if (n.email) await sendEmail(n.memberId, n.title, n.body ?? "", n.link).catch(() => {});
+  if (email) await sendEmail(n.memberId, n.title, n.body ?? "", n.link).catch(() => {});
   return true;
 }
 
