@@ -10,12 +10,22 @@ import { tzOffset, todayIn, addDays, timeIn } from "./dates";
 // artist's own database.
 
 export type GoogleFeature = "calendar" | "gmail";
+const GMAIL_READONLY = "https://www.googleapis.com/auth/gmail.readonly";
+const GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send";
+// gmail.modify = read + mark as read (Space never deletes, archives or moves email).
+// It includes reading, so new connections don't ask for gmail.readonly as well.
+export const GMAIL_MODIFY = "https://www.googleapis.com/auth/gmail.modify";
 export const FEATURE_SCOPES: Record<GoogleFeature, string[]> = {
   calendar: ["https://www.googleapis.com/auth/calendar.events.readonly"],
-  gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"],
+  gmail: [GMAIL_MODIFY, GMAIL_SEND],
 };
 export const CALENDAR_SCOPE = FEATURE_SCOPES.calendar[0];
-const hasFeature = (scopes: string, f: GoogleFeature) => FEATURE_SCOPES[f].every((x) => scopes.split(" ").includes(x));
+// Gmail works with either read permission: connections made before v1.6 have gmail.readonly
+// (no "mark as read"); newer ones have gmail.modify.
+const hasFeature = (scopes: string, f: GoogleFeature) => {
+  const s = scopes.split(" ");
+  return f === "gmail" ? s.includes(GMAIL_SEND) && (s.includes(GMAIL_READONLY) || s.includes(GMAIL_MODIFY)) : FEATURE_SCOPES[f].every((x) => s.includes(x));
+};
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const TIMEOUT = 5000; // never let a slow Google response hold up a page
 
@@ -66,7 +76,9 @@ export async function connectWithCode(memberId: string, code: string, features: 
   // People can untick boxes on Google's screen: keep only the features they fully granted.
   const granted = (["calendar", "gmail"] as GoogleFeature[]).filter((f) => hasFeature(data.scope ?? "", f));
   if (!features.every((f) => granted.includes(f))) return { ok: false as const, reason: "scope" };
-  const scopes = granted.flatMap((f) => FEATURE_SCOPES[f]).join(" ");
+  // Store exactly what Google granted (of the scopes Space uses).
+  const known = new Set([...Object.values(FEATURE_SCOPES).flat(), GMAIL_READONLY]);
+  const scopes = (data.scope ?? "").split(" ").filter((x) => known.has(x)).join(" ");
   // The id_token comes straight from Google over HTTPS; we only read the email from it.
   let email: string | null = null;
   try { email = JSON.parse(Buffer.from(data.id_token!.split(".")[1], "base64url").toString()).email ?? null; } catch {}
@@ -82,12 +94,13 @@ export async function getConnection(memberId: string) {
   const [c] = await sql<{ google_email: string | null; status: "ok" | "expired"; connected_at: string; scopes: string }[]>`
     select google_email, status, connected_at, scopes from calendar_connections where member_id = ${memberId}`;
   if (!c) return null;
-  return { ...c, features: (["calendar", "gmail"] as GoogleFeature[]).filter((f) => hasFeature(c.scopes, f)) };
+  const features = (["calendar", "gmail"] as GoogleFeature[]).filter((f) => hasFeature(c.scopes, f));
+  return { ...c, features, canMarkRead: features.includes("gmail") && c.scopes.split(" ").includes(GMAIL_MODIFY) };
 }
 
 /** Stops Space using one feature (the Google permission stays until they fully disconnect). */
 export async function turnOff(memberId: string, feature: GoogleFeature) {
-  const drop = FEATURE_SCOPES[feature];
+  const drop = feature === "gmail" ? [...FEATURE_SCOPES.gmail, GMAIL_READONLY] : FEATURE_SCOPES[feature];
   const c = await getConnection(memberId);
   if (!c) return;
   const keep = c.scopes.split(" ").filter((x) => x && !drop.includes(x));

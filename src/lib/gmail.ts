@@ -79,6 +79,7 @@ export async function listInbox(memberId: string, opts: { unreadOnly?: boolean; 
 
 export type Attachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
 export type Message = {
+  unread: boolean;
   id: string; from: string; fromEmail: string; to: string; cc: string; replyTo: string; date: number; subject: string;
   messageIdHeader: string; references: string; html: string | null; text: string; attachments: Attachment[];
 };
@@ -102,6 +103,7 @@ export async function getThread(memberId: string, threadId: string): Promise<Gma
     if (!out.text && out.html) out.text = htmlToText(out.html);
     const from = parseAddress(header(m.payload, "From"));
     return {
+      unread: Boolean(m.labelIds?.includes("UNREAD")),
       id: m.id, from: from.name, fromEmail: from.email, to: header(m.payload, "To"), cc: header(m.payload, "Cc"), replyTo: header(m.payload, "Reply-To"),
       date: Number(m.internalDate ?? 0), subject: header(m.payload, "Subject"), messageIdHeader: header(m.payload, "Message-ID"),
       references: header(m.payload, "References"), html: out.html, text: out.text, attachments: out.attachments,
@@ -109,6 +111,16 @@ export async function getThread(memberId: string, threadId: string): Promise<Gma
   });
   const account = (await getConnection(memberId))?.google_email ?? null;
   return { state: "ok", subject: messages[0]?.subject || "(no subject)", messages, account };
+}
+
+/** Marks a conversation as read in Gmail (only if the person granted the "mark as read" permission). */
+export async function markThreadRead(memberId: string, threadId: string) {
+  if (!/^[0-9a-f]+$/i.test(threadId) || !(await getConnection(memberId))?.canMarkRead) return;
+  await gmail(memberId, `/threads/${threadId}/modify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+  });
 }
 
 export async function getAttachment(memberId: string, messageId: string, attachmentId: string) {

@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import { disconnectCalendar, turnOffGoogleFeature } from "../../actions/calendar";
 
-export type GoogleInfo = { configured: boolean; email: string | null; status: "ok" | "expired" | null; features: ("calendar" | "gmail")[] };
+export type GoogleInfo = { configured: boolean; email: string | null; status: "ok" | "expired" | null; features: ("calendar" | "gmail")[]; canMarkRead: boolean };
 
 const RESULT: Record<string, { text: string; bad?: boolean; info?: boolean }> = {
   connected: { text: "Connected! ✓" },
@@ -50,6 +50,11 @@ export function GoogleCard({ info, result }: { info: GoogleInfo; result: string 
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 600 }}>{f.name} {on && <span className="small" style={{ color: "var(--success)", fontWeight: 600 }}>· On</span>}</div>
                     <div className="tiny muted">{f.what}</div>
+                    {f.key === "gmail" && on && !info.canMarkRead && (
+                      <div className="tiny" style={{ marginTop: 4 }}>
+                        New: emails you open in Space can be marked as read in Gmail. <a href="/api/google/connect?want=gmail" style={{ textDecoration: "underline" }}>Turn it on</a>
+                      </div>
+                    )}
                   </div>
                   {on ? (
                     <button className="btn btn-sm btn-ghost" disabled={pending} onClick={() => start(async () => { await turnOffGoogleFeature(f.key); setFeatures((x) => x.filter((y) => y !== f.key)); })}>Turn off</button>

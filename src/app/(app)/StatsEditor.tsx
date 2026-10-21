@@ -5,7 +5,7 @@ import { saveStats } from "../actions/stats";
 import { PLATFORMS } from "@/lib/levels";
 import { I } from "@/components/Icons";
 
-export default function StatsEditor({ current }: { current: Record<string, number> }) {
+export default function StatsEditor({ current, auto = [] }: { current: Record<string, number>; auto?: string[] }) {
   const [open, setOpen] = useState(false);
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(PLATFORMS.map((p) => [p.key, current[p.key]?.toString() ?? ""])));
   const [pending, start] = useTransition();
@@ -13,7 +13,7 @@ export default function StatsEditor({ current }: { current: Record<string, numbe
   const save = () =>
     start(async () => {
       const out: Record<string, number | null> = {};
-      for (const p of PLATFORMS) out[p.key] = vals[p.key] === "" ? null : Number(vals[p.key].replace(/[^\d]/g, ""));
+      for (const p of PLATFORMS) out[p.key] = vals[p.key] === "" || auto.includes(p.key) ? null : Number(vals[p.key].replace(/[^\d]/g, ""));
       await saveStats(out);
       setOpen(false);
       router.refresh();
@@ -30,7 +30,9 @@ export default function StatsEditor({ current }: { current: Record<string, numbe
               {PLATFORMS.map((p) => (
                 <div className="field" key={p.key}>
                   <label className="label">{p.name} · {p.metric}</label>
-                  <input className="input" inputMode="numeric" value={vals[p.key]} onChange={(e) => setVals((v) => ({ ...v, [p.key]: e.target.value }))} placeholder="0" />
+                  {auto.includes(p.key)
+                    ? <input className="input" value={`${vals[p.key]} · updates automatically`} disabled title="Linked in Settings → YouTube stats" />
+                    : <input className="input" inputMode="numeric" value={vals[p.key]} onChange={(e) => setVals((v) => ({ ...v, [p.key]: e.target.value }))} placeholder="0" />}
                 </div>
               ))}
             </div>

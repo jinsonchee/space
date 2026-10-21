@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/auth";
 import { getSettings } from "@/lib/db";
-import { getThread, gmailLink } from "@/lib/gmail";
+import { getThread, gmailLink, markThreadRead } from "@/lib/gmail";
 import { getMembersLite, getLabels, getGoalsLite } from "@/lib/queries";
 import { whenFull } from "@/lib/when";
 import { I } from "@/components/Icons";
@@ -25,6 +25,8 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       </>
     );
   }
+  // Opening a conversation in Space marks it read in Gmail too (like opening it in Gmail).
+  if (r.messages.some((m) => m.unread)) await markThreadRead(me.id, id);
   const messages = r.messages.map((m) => ({ ...m, when: whenFull(m.date, s!.timezone) }));
   return (
     <ThreadClient

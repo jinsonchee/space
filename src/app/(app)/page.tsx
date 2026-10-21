@@ -12,6 +12,7 @@ import { calendarConfigured, eventsBetween, eventsOn } from "@/lib/google";
 import TodayCard from "./TodayCard";
 import InboxCard from "./InboxCard";
 import { listInbox } from "@/lib/gmail";
+import { getYouTube } from "@/lib/youtube";
 import { when } from "@/lib/when";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
@@ -49,6 +50,7 @@ export default async function Home() {
 
   const calendar = eventsBetween(me.id, today, today, s.timezone);
   const inbox = listInbox(me.id, { unreadOnly: true, max: 3 });
+  const youtube = getYouTube();
   const [people, latest, past, myTasks, labels, todos, goals, streak] = await Promise.all([
     sql<{ id: string; name: string; role_label: string; avatar: AvatarConfig; access: string }[]>`
       select id, name, role_label, avatar, access from members order by case access when 'master' then 0 else 1 end, created_at`,
@@ -68,6 +70,7 @@ export default async function Home() {
   const todayEvents = cal.state === "ok" ? eventsOn(cal.events, today, s.timezone) : [];
   const calState = cal.state === "off" ? (calendarConfigured() ? "connect" : null) : cal.state;
   const mail = await inbox;
+  const auto = new Set((await youtube).channel ? ["youtube"] : []);
   const mailCard = mail.state === "off" ? (calendarConfigured() ? { state: "connect" as const } : null) : mail;
   const mailTimes = mail.state === "ok" ? Object.fromEntries(mail.threads.map((t) => [t.id, when(t.date, s.timezone)])) : {};
   const now = Object.fromEntries(latest.map((r) => [r.platform, Number(r.value)]));
@@ -91,7 +94,7 @@ export default async function Home() {
           <p className="muted small" style={{ fontWeight: 600 }}>{prettyDay(today)}</p>
           <h1 style={{ marginTop: 4 }}>{greet}, {me.name.split(" ")[0]}</h1>
         </div>
-        {isAdmin && <StatsEditor current={now} />}
+        {isAdmin && <StatsEditor current={now} auto={[...auto]} />}
       </div>
 
       <div className="grid g-hero" style={{ marginBottom: 16 }}>
@@ -227,7 +230,7 @@ export default async function Home() {
                 </div>
                 <div className="stat">
                   <span className="stat-value">{v !== undefined ? compact(v) : "—"}</span>
-                  <span className="tiny muted">{p.metric}{g !== null ? " · 30 days" : ""}</span>
+                  <span className="tiny muted">{p.metric}{g !== null ? " · 30 days" : ""}{auto.has(p.key) ? " · auto" : ""}</span>
                 </div>
               </div>
             );

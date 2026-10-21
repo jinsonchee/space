@@ -114,7 +114,7 @@ Give one short step at a time, with the direct link, and wait for "done" each ti
    Then https://console.cloud.google.com/auth/branding → **Application home page** `https://<domain>`, **privacy policy** `https://<domain>/privacy`, **Authorized domains** → add `<domain>` → **Save**. (Google won't allow publishing without these.)
 4. **Data access:** https://console.cloud.google.com/auth/scopes → **Add or remove scopes** → under "Manually add scopes" paste these three lines:
    `https://www.googleapis.com/auth/calendar.events.readonly`
-   `https://www.googleapis.com/auth/gmail.readonly`
+   `https://www.googleapis.com/auth/gmail.modify` (read email + mark as read; Space never deletes or moves email)
    `https://www.googleapis.com/auth/gmail.send`
    → **Add to table** → also tick `openid` and `.../auth/userinfo.email` → **Update** → **Save**. (Gmail shows under "restricted scopes" — expected. Google allows this unverified for personal-use apps under 100 users; tested 2026-10.)
 5. **Publish:** https://console.cloud.google.com/auth/audience → **Publish app** → **Confirm** (status "In production"). Ignore the verification notice — unverified is fine for up to 100 people; Testing mode would expire everyone's connection every 7 days.
@@ -122,6 +122,7 @@ Give one short step at a time, with the direct link, and wait for "done" each ti
    - The **Client ID** isn't secret: the artist can paste it in chat → `printf '%s' "<id>" | npx --yes vercel@latest env add GOOGLE_CLIENT_ID --environment production --sensitive` (in a fresh linked temp clone, as in step 8).
    - The **Client secret** must never go through chat or a visible terminal prompt (the plain `vercel env add` prompt echoes it). Write a small script in the temp clone that does `read -rsp` (hidden), strips whitespace, checks it starts with `GOCSPX-`, and pipes it to `vercel env add GOOGLE_CLIENT_SECRET --environment production --sensitive --force`; run it in a terminal tab for the artist to paste into.
 7. Redeploy, then the artist opens `https://<domain>/profile` → **Google** card → **Turn on** Calendar and/or Gmail. Tell them first: Google will say "Google hasn't verified this app" → **Advanced** → **Go to … (unsafe)** → keep every box ticked → **Continue**. Expect a green "Connected! ✓".
+8. **YouTube stats (optional, 3 min):** https://console.cloud.google.com/apis/library/youtube.googleapis.com → **Enable**. Then https://console.cloud.google.com/apis/credentials → **+ Create credentials → API key** → in the key's settings set **API restrictions → Restrict key → YouTube Data API v3** → **Save**. Save it as `YOUTUBE_API_KEY` with the same hidden-paste script approach as the client secret (`--sensitive`), redeploy, then the artist opens **Settings → YouTube stats** and enters their channel handle (e.g. `@layyi`). Subscribers then update daily (YouTube rounds public counts).
 If connecting fails, `vercel logs` shows a `[calendar] connect failed: …` line with the reason (e.g. `invalid_client` = wrong secret; "access blocked … being tested" = app still in Testing).
 
 ## 9. Remove the publisher's access (do not skip)

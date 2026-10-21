@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, getSettings } from "@/lib/db";
 import { notify } from "@/lib/notify";
 import { todayIn, localHourAndDay, mondayOf, addDays } from "@/lib/dates";
+import { syncYouTube } from "@/lib/youtube";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
  *  - Sunday evening: "plan next week" prompt (+ email)
  *  - Monday morning: weekly overview (+ email)
  *  - Every morning: tasks due today / overdue (in-app)
+ *  - Every run: refresh YouTube channel numbers (if linked)
  * On-hold tasks are paused on purpose: no due/overdue nudges, just a count on Monday.
  */
 export async function GET(req: Request) {
@@ -107,5 +109,6 @@ export async function GET(req: Request) {
     done.push("daily");
   }
 
-  return NextResponse.json({ ok: true, ran: done, local: { today, hour, weekday } });
+  const youtube = await syncYouTube().catch(() => "error");
+  return NextResponse.json({ ok: true, ran: done, youtube, local: { today, hour, weekday } });
 }
