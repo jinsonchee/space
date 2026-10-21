@@ -84,7 +84,7 @@ export default function SettingsClient({ settings, isMaster, update, email, repo
                 {[...new Set([f.timezone, ...TZS])].map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}
               </select>
             </div>
-            {msg && <p className="small" style={{ color: msg.bad ? "var(--danger)" : "var(--accent)" }}>{msg.t}</p>}
+            {msg && <p className="small" style={{ color: msg.bad ? "var(--danger)" : "var(--success)" }}>{msg.t}</p>}
             {isMaster && <button className="btn btn-accent" style={{ alignSelf: "flex-start", marginTop: 6 }} onClick={save} disabled={pending}>{pending ? "Saving…" : "Save branding"}</button>}
           </fieldset>
         </section>

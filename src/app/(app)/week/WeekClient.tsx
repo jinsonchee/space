@@ -5,9 +5,12 @@ import { addTodo, toggleTodo, deleteTodo, renewWeek, carryOver } from "../../act
 import { addDays, mondayOf, prettyDay, shortDay } from "@/lib/dates";
 import { I } from "@/components/Icons";
 
+import type { CalEvent } from "@/lib/google";
+import { EventList } from "../TodayCard";
+
 export type Todo = { id: string; scope: "day" | "week"; on_date: string; text: string; done: boolean };
 
-export default function WeekClient({ todos, today, day, monday, isWeekend }: { todos: Todo[]; today: string; day: string; monday: string; isWeekend: boolean }) {
+export default function WeekClient({ todos, today, day, monday, isWeekend, events, calExpired }: { todos: Todo[]; today: string; day: string; monday: string; isWeekend: boolean; events: Record<string, CalEvent[]> | null; calExpired: boolean }) {
   const [list, apply] = useOptimistic(todos, (state: Todo[], a: { type: "toggle" | "delete"; id: string } | { type: "add"; todo: Todo }) => {
     if (a.type === "add") return [...state, a.todo];
     if (a.type === "toggle") return state.map((t) => (t.id === a.id ? { ...t, done: !t.done } : t));
@@ -98,6 +101,13 @@ export default function WeekClient({ todos, today, day, monday, isWeekend }: { t
               );
             })}
           </div>
+          {events && (events[day]?.length ?? 0) > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div className="tiny muted" style={{ fontWeight: 700, marginBottom: 6 }}>🗓️ CALENDAR</div>
+              <EventList events={events[day]} now={null} empty="" />
+            </div>
+          )}
+          {calExpired && <p className="small" style={{ marginBottom: 12, color: "var(--warn)" }}>Your Google Calendar connection expired. <a href="/api/google/connect" style={{ textDecoration: "underline" }}>Reconnect</a></p>}
           <TodoList items={daily} onToggle={toggle} onDelete={del} empty="Nothing planned. Add the first thing below." />
           <AddRow placeholder="Add a to-do for this day…" onAdd={(t) => add("day", t)} />
         </section>

@@ -18,6 +18,6 @@ holds an artist's database credentials.
 - The person running these commands is not a developer. Explain each step in one short plain-English line, do the work yourself, and only stop when a human genuinely has to act (signing in, approving in a browser).
 
 ## Useful facts
-- Env vars: `DATABASE_URL`, `SESSION_SECRET`, `SETUP_CODE`, `CRON_SECRET`, `APP_URL`, optional `RESEND_API_KEY`, `EMAIL_FROM`, `UPDATE_FEED_URL`.
+- Env vars: `DATABASE_URL`, `SESSION_SECRET`, `SETUP_CODE`, `CRON_SECRET`, `APP_URL`, optional `RESEND_API_KEY`, `EMAIL_FROM`, `UPDATE_FEED_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (Google Calendar — each artist uses their own Google Cloud app; tokens are encrypted with a key derived from `SESSION_SECRET`, see `src/lib/crypto.ts`).
 - Local dev: copy `.env.example` to `.env.local`, `npm install`, `npm run dev`.
 - Characters: `src/lib/sprites.ts` (renderer) and `src/lib/characters.ts` (LAYYI + crew presets).

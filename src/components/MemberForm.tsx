@@ -77,7 +77,7 @@ export function MemberForm({ member, viewer, onDone }: { member: EditableMember 
           <span className="tiny muted" style={{ marginTop: 6 }}>Admins can add people, edit profiles, reset PINs and update stats.</span>
         </div>
       )}
-      {msg && <p className="small" style={{ color: msg.bad ? "var(--danger)" : "var(--accent)" }}>{msg.text}</p>}
+      {msg && <p className="small" style={{ color: msg.bad ? "var(--danger)" : "var(--success)" }}>{msg.text}</p>}
       <div className="row between wrap" style={{ gap: 8, marginTop: 4 }}>
         <div className="row" style={{ gap: 6 }}>
           {canAdmin && (

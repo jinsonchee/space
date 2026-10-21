@@ -1,4 +1,4 @@
 {
-  "version": "1.3.0",
-  "notes": "New colour-coded task statuses (In-queue, In-progress, On-hold, Complete) and priorities (Low, Normal, Urgent), a clearer New Task window, and fixes for slow loading and saving."
+  "version": "1.4.0",
+  "notes": "Connect your Google Calendar in My profile to see today’s events on Home (with a live “Next up” line) and each day’s events in My Week. On-hold tasks no longer send overdue reminders."
 }

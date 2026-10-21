@@ -8,6 +8,8 @@ import { goalsWithProgress, streakFor, type GoalProgress } from "@/lib/goals";
 import { Character } from "@/components/Pixel";
 import { I } from "@/components/Icons";
 import { priorityLabel, statusLabel } from "@/lib/task-meta";
+import { calendarConfigured, eventsBetween, eventsOn } from "@/lib/google";
+import TodayCard from "./TodayCard";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
 
@@ -42,6 +44,7 @@ export default async function Home() {
   const monthAgo = addDays(today, -30);
   const year = today.slice(0, 4);
 
+  const calendar = eventsBetween(me.id, today, today, s.timezone);
   const [people, latest, past, myTasks, labels, todos, goals, streak] = await Promise.all([
     sql<{ id: string; name: string; role_label: string; avatar: AvatarConfig; access: string }[]>`
       select id, name, role_label, avatar, access from members order by case access when 'master' then 0 else 1 end, created_at`,
@@ -57,6 +60,9 @@ export default async function Home() {
     streakFor(me.id, today, s.timezone),
   ]);
 
+  const cal = await calendar;
+  const todayEvents = cal.state === "ok" ? eventsOn(cal.events, today, s.timezone) : [];
+  const calState = cal.state === "off" ? (calendarConfigured() ? "connect" : null) : cal.state;
   const now = Object.fromEntries(latest.map((r) => [r.platform, Number(r.value)]));
   const then = Object.fromEntries(past.map((r) => [r.platform, Number(r.value)]));
   const { hour } = localHourAndDay(s.timezone);
@@ -139,6 +145,8 @@ export default async function Home() {
           <Link href="/week" className="btn" style={{ width: "100%", marginTop: 8 }}>Open My Week</Link>
         </section>
       </div>
+
+      {calState && <TodayCard cal={calState} events={todayEvents} />}
 
       {crew.length > 0 && (
         <section className="card crew" style={{ marginBottom: 16 }}>

@@ -161,7 +161,7 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
           </div>
         )}
 
-        {msg && <p className="small" style={{ marginTop: 12, color: msg.bad ? "var(--danger)" : "var(--accent)" }}>{msg.text}</p>}
+        {msg && <p className="small" style={{ marginTop: 12, color: msg.bad ? "var(--danger)" : "var(--success)" }}>{msg.text}</p>}
         {!title.trim() && (description.trim() || assignees.length > 0) && <p className="small muted" style={{ marginTop: 12 }}>Add a name in the Task box at the top to create it.</p>}
 
         <div className="row between" style={{ marginTop: 20 }}>

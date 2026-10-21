@@ -36,3 +36,17 @@ export function shortDay(iso: string) {
 export function isIsoDate(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
+
+/** UTC offset of a timezone on a given day, as "+08:00" (for building RFC 3339 times). */
+export function tzOffset(tz: string, iso: string) {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" })
+    .formatToParts(new Date(iso + "T12:00:00Z"))
+    .find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+  const m = name.match(/GMT([+-]\d{2}):?(\d{2})?/);
+  return m ? `${m[1]}:${m[2] ?? "00"}` : "+00:00";
+}
+
+/** "14:30" in the given timezone. */
+export function timeIn(tz: string, d: Date) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+}

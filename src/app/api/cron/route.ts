@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
  *  - Sunday evening: "plan next week" prompt (+ email)
  *  - Monday morning: weekly overview (+ email)
  *  - Every morning: tasks due today / overdue (in-app)
+ * On-hold tasks are paused on purpose: no due/overdue nudges, just a count on Monday.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -60,16 +61,18 @@ export async function GET(req: Request) {
   if (force === "monday" || (weekday === "Mon" && hour < 13)) {
     const sunday = addDays(monday, 6);
     for (const m of members) {
-      const [o] = await sql<{ goals: number; due: number; overdue: number; doing: number }[]>`
+      const [o] = await sql<{ goals: number; due: number; overdue: number; doing: number; hold: number }[]>`
         select
           (select count(*)::int from todos where member_id = ${m.id} and scope = 'week' and on_date = ${monday}) as goals,
-          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status <> 'done' and t.due_date between ${monday} and ${sunday}) as due,
-          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status <> 'done' and t.due_date < ${monday}) as overdue,
-          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status = 'doing') as doing`;
+          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status not in ('done', 'hold') and t.due_date between ${monday} and ${sunday}) as due,
+          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status not in ('done', 'hold') and t.due_date < ${monday}) as overdue,
+          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status = 'doing') as doing,
+          (select count(*)::int from tasks t join task_assignees a on a.task_id = t.id where a.member_id = ${m.id} and t.status = 'hold') as hold`;
       const lines = [
         `• ${o.due} task${o.due === 1 ? "" : "s"} due this week`,
         o.overdue ? `• ${o.overdue} overdue — let's clear ${o.overdue === 1 ? "it" : "them"} first` : null,
         o.doing ? `• ${o.doing} in progress` : null,
+        o.hold ? `• ${o.hold} task${o.hold === 1 ? "" : "s"} on hold` : null,
         `• ${o.goals} weekly goal${o.goals === 1 ? "" : "s"} set${o.goals === 0 ? " (add some!)" : ""}`,
       ].filter(Boolean);
       await notify({
@@ -90,7 +93,7 @@ export async function GET(req: Request) {
     const rows = await sql<{ member_id: string; id: string; title: string; due: string }[]>`
       select a.member_id, t.id, t.title, to_char(t.due_date, 'YYYY-MM-DD') as due
       from tasks t join task_assignees a on a.task_id = t.id
-      where t.status <> 'done' and t.due_date <= ${today}`;
+      where t.status not in ('done', 'hold') and t.due_date <= ${today}`;
     for (const r of rows) {
       await notify({
         memberId: r.member_id,

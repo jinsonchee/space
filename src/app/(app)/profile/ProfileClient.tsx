@@ -6,8 +6,9 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { changeMyPin, setTheme } from "../../actions/members";
 import { logout } from "../../actions/auth";
 import { I } from "@/components/Icons";
+import { CalendarCard, type CalendarInfo } from "./CalendarCard";
 
-export default function ProfileClient({ me }: { me: Member }) {
+export default function ProfileClient({ me, calendar, calendarResult }: { me: Member; calendar: CalendarInfo; calendarResult: string | null }) {
   const [pending, start] = useTransition();
   const [pins, setPins] = useState({ cur: "", next: "", again: "" });
   const [pinMsg, setPinMsg] = useState<{ t: string; bad?: boolean } | null>(null);
@@ -42,6 +43,8 @@ export default function ProfileClient({ me }: { me: Member }) {
           </section>
 
           <div className="col" style={{ gap: 16 }}>
+            <CalendarCard info={calendar} result={calendarResult} />
+
             <section className="card">
               <h2 style={{ marginBottom: 14 }}>Appearance</h2>
               <div className="seg">
@@ -67,7 +70,7 @@ export default function ProfileClient({ me }: { me: Member }) {
                     placeholder={k === "cur" ? "Current PIN" : k === "next" ? "New 6-digit PIN" : "Repeat new PIN"}
                     value={pins[k]} onChange={(e) => setPins({ ...pins, [k]: e.target.value.replace(/\D/g, "") })} />
                 ))}
-                {pinMsg && <p className="small" style={{ color: pinMsg.bad ? "var(--danger)" : "var(--accent)" }}>{pinMsg.t}</p>}
+                {pinMsg && <p className="small" style={{ color: pinMsg.bad ? "var(--danger)" : "var(--success)" }}>{pinMsg.t}</p>}
                 <button className="btn" disabled={pending}>Update PIN</button>
               </form>
             </section>
