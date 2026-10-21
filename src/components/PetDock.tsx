@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import { Pet } from "./Pixel";
 import type { PetKind } from "@/lib/sprites";
 
@@ -13,6 +14,9 @@ function ago(iso: string) {
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
+
+// Bubbles grow out of the pet (bottom right) and shrink back into it.
+const grow = { initial: { opacity: 0, scale: 0.85 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.85 } } as const;
 
 /** The pet mascot lives in the corner and delivers every notification as a speech bubble. */
 export function PetDock({ pet, petName }: { pet?: PetKind; petName: string }) {
@@ -65,8 +69,9 @@ export function PetDock({ pet, petName }: { pet?: PetKind; petName: string }) {
 
   return (
     <div className="pet-dock">
+      <AnimatePresence mode="popLayout">
       {open ? (
-        <div className="bubble" style={{ width: "min(340px, calc(100vw - 110px))", maxWidth: "none", padding: 10 }}>
+        <motion.div key="mailbag" {...grow} className="bubble" style={{ width: "min(340px, calc(100vw - 110px))", maxWidth: "none", padding: 10 }}>
           <div className="row between" style={{ padding: "4px 6px 8px" }}>
             <strong className="head" style={{ fontSize: 15 }}>{petName}&apos;s mailbag</strong>
             <div className="row" style={{ gap: 4 }}>
@@ -94,14 +99,15 @@ export function PetDock({ pet, petName }: { pet?: PetKind; petName: string }) {
               );
             })}
           </div>
-        </div>
+        </motion.div>
       ) : peek ? (
-        <div className="bubble" onClick={() => { setOpen(true); setPeek(null); }} style={{ cursor: "pointer" }}>
+        <motion.div key={`peek-${peek.id}`} {...grow} className="bubble" onClick={() => { setOpen(true); setPeek(null); }} style={{ cursor: "pointer" }}>
           <div className="tiny faint" style={{ fontWeight: 700, marginBottom: 2 }}>{petName} says</div>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{peek.title}</div>
           {peek.body && <div className="small muted" style={{ marginTop: 2, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{peek.body}</div>}
-        </div>
+        </motion.div>
       ) : null}
+      </AnimatePresence>
       <button className="pet-button" onClick={() => { setOpen((o) => !o); setPeek(null); }} aria-label={`${petName}: ${unread} new notifications`}>
         <Pet kind={pet} size={60} />
         {unread > 0 && <span className="pet-badge">{unread > 9 ? "9+" : unread}</span>}

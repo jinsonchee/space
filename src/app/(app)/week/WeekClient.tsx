@@ -7,6 +7,7 @@ import { I } from "@/components/Icons";
 
 import type { CalEvent } from "@/lib/google";
 import { EventList } from "../TodayCard";
+import { Toast } from "@/components/Toast";
 
 export type Todo = { id: string; scope: "day" | "week"; on_date: string; text: string; done: boolean };
 
@@ -42,7 +43,7 @@ export default function WeekClient({ todos, today, day, monday, isWeekend, event
 
   return (
     <>
-      {flash && <div className="toast">{flash}</div>}
+      <Toast show={!!flash}>{flash}</Toast>
       <div className="page-head">
         <div>
           <h1>My Week</h1>

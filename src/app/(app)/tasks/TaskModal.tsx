@@ -6,6 +6,7 @@ import { saveTask, deleteTask, nudgeTask, createLabel } from "../../actions/task
 import { Photo } from "@/components/Photo";
 import { I } from "@/components/Icons";
 import { STATUSES, PRIORITIES } from "@/lib/task-meta";
+import { Sheet } from "@/components/Sheet";
 
 const LABEL_COLORS = ["#8b5cf6", "#ff4fa3", "#ffb020", "#3b82f6", "#1ed760", "#22d3ee", "#ff6a3d"];
 
@@ -76,8 +77,8 @@ export function TaskModal({ task, draft, members, labels: initialLabels, goals, 
   const othersAssigned = (task?.assignees ?? []).some((a) => a !== meId);
 
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && requestClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={task ? "Edit task" : "New task"}>
+    <>
+      <Sheet open onClose={requestClose} closeOnEscape={false} label={task ? "Edit task" : "New task"}>
         <div className="row between" style={{ marginBottom: 16 }}>
           <span className="eyebrow">{task ? "Edit task" : "New task"}</span>
           <button className="btn btn-ghost btn-icon btn-sm" onClick={requestClose} aria-label="Close"><I.x style={{ width: 16 }} /></button>
@@ -184,7 +185,7 @@ export function TaskModal({ task, draft, members, labels: initialLabels, goals, 
             <button className="btn btn-accent" onClick={save} disabled={pending || !title.trim()} title={!title.trim() ? "Give the task a name first" : undefined}>{pending ? "Saving…" : task ? "Save" : "Create task"}</button>
           </div>
         </div>
-      </div>
+      </Sheet>
         {confirmClose && (
           <div className="modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="discard-title">
             <div className="card" style={{ width: "min(340px, 100%)", padding: 20, textAlign: "center" }}>
@@ -192,11 +193,11 @@ export function TaskModal({ task, draft, members, labels: initialLabels, goals, 
               <p className="small muted" style={{ margin: "6px 0 16px" }}>{task ? "Your edits won't be saved." : "What you've typed won't be saved."}</p>
               <div className="row" style={{ gap: 8, justifyContent: "center" }}>
                 <button className="btn" autoFocus onClick={() => setConfirmClose(false)}>Keep editing</button>
-                <button className="btn btn-danger" onClick={onClose}>Discard</button>
+                <button className="btn btn-danger" onClick={() => { setConfirmClose(false); onClose(); }}>Discard</button>
               </div>
             </div>
           </div>
         )}
-    </div>
+    </>
   );
 }

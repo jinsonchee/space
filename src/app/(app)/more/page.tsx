@@ -4,8 +4,8 @@ import { requireMember, atLeast } from "@/lib/auth";
 
 const ITEMS = [
   { href: "/inbox", label: "Inbox", icon: "inbox" },
-  { href: "/trends", label: "Daily Trends", icon: "trends", soon: true },
-  { href: "/socials", label: "Post Stats", icon: "socials", soon: true },
+  { href: "/trends", label: "Daily Trends", icon: "trends" },
+  { href: "/socials", label: "Post Stats", icon: "socials" },
   { href: "/profile", label: "My profile", icon: "user" },
   { href: "/settings", label: "Settings", icon: "settings", adminOnly: true },
 ] as const;

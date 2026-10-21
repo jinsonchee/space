@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { sendMail, saveMailDraft, discardMailDraft } from "../../actions/gmail";
 import { I } from "@/components/Icons";
+import { motion } from "motion/react";
 
 const MAX = 4 * 1024 * 1024;
 const UNDO_SECONDS = 5;
@@ -161,7 +162,9 @@ export function Composer({ init, signature, gmailUrl, floating, onClose, onSent 
   const title = { new: "New email", reply: "Reply", all: "Reply all", forward: "Forward", draft: "Draft" }[init.mode];
 
   return (
-    <section className={`card composer ${floating ? "composer-floating" : ""}`} aria-label={title}>
+    <motion.section className={`card composer ${floating ? "composer-floating" : ""}`} aria-label={title}
+      style={{ transformOrigin: floating ? "bottom right" : "top center" }}
+      initial={{ opacity: 0, y: floating ? 24 : 8, scale: floating ? 0.96 : 1 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: floating ? 24 : 8, scale: floating ? 0.96 : 1 }}>
       <div className="row between" style={{ marginBottom: 10 }}>
         <strong>{title}</strong>
         <span className="tiny muted">{saved === "saving" ? "Saving draft…" : saved === "saved" ? "Draft saved" : ""}</span>
@@ -227,6 +230,6 @@ export function Composer({ init, signature, gmailUrl, floating, onClose, onSent 
         )}
         <button type="button" className="btn btn-ghost btn-icon" onClick={discard} disabled={busy} aria-label="Discard" title={draftId ? "Discard draft" : "Discard"}><I.trash style={{ width: 16 }} /></button>
       </div>
-    </section>
+    </motion.section>
   );
 }

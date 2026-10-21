@@ -5,6 +5,7 @@ import type { TaskRow, MemberLite, Label, GoalLite } from "@/lib/queries";
 import { setTaskStatus } from "../../actions/tasks";
 import { I } from "@/components/Icons";
 import { Photo } from "@/components/Photo";
+import { AnimatePresence } from "motion/react";
 import { TaskModal } from "./TaskModal";
 import { ImportClickUp } from "./ImportClickUp";
 import { shortDay, addDays, mondayOf } from "@/lib/dates";
@@ -117,8 +118,10 @@ export default function TasksClient({ tasks, members, labels, goals, meId, isAdm
 
       {view === "calendar" && <Calendar list={list} today={today} onOpen={setEditing} labelById={labelById} />}
 
+      <AnimatePresence>
       {editing && (
         <TaskModal
+          key={editing === "new" ? "new" : editing.id}
           task={editing === "new" ? null : editing}
           members={members}
           labels={labels}
@@ -127,6 +130,7 @@ export default function TasksClient({ tasks, members, labels, goals, meId, isAdm
           onClose={() => { setEditing(null); if (openId) router.replace("/tasks"); }}
         />
       )}
+      </AnimatePresence>
     </>
   );
 }

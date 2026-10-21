@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { sql } from "@/lib/db";
 import { requireAccess } from "@/lib/auth";
-import { lookupChannel, saveChannel } from "@/lib/youtube";
+import { lookupChannel, saveChannel, syncVideos } from "@/lib/youtube";
 
 /** Artist/admins: link the YouTube channel; fetches its numbers straight away. */
 export async function setYouTubeChannel(input: string) {
@@ -10,6 +10,7 @@ export async function setYouTubeChannel(input: string) {
   const r = await lookupChannel(input);
   if (!r.ok) return r;
   await saveChannel(input.trim(), r.channel);
+  await syncVideos(r.channel.id); // so Post Stats fills in straight away
   revalidatePath("/", "layout");
   return { ok: true as const, channel: r.channel };
 }

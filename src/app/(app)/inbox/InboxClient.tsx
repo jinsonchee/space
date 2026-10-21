@@ -6,6 +6,8 @@ import type { FolderKey, GLabel, TabKey, ThreadSummary } from "@/lib/gmail";
 import { threadAction } from "../../actions/gmail";
 import { Composer } from "./Composer";
 import { I } from "@/components/Icons";
+import { AnimatePresence } from "motion/react";
+import { Toast } from "@/components/Toast";
 
 export type Folder = { key: FolderKey; name: string };
 export type Tab = { key: TabKey; name: string };
@@ -161,15 +163,15 @@ export default function InboxClient(p: {
         </div>
       </section>
 
-      {compose && <Composer floating init={{ mode: "new" }} signature={p.signature} onClose={() => setCompose(false)} onSent={(m) => { setCompose(false); setToast({ text: m }); }} />}
+      <AnimatePresence>{compose && <Composer floating init={{ mode: "new" }} signature={p.signature} onClose={() => setCompose(false)} onSent={(m) => { setCompose(false); setToast({ text: m }); }} />}</AnimatePresence>
 
-      {toast && (
-        <div className="mail-toast" role="status">
+      <Toast show={!!toast} edge="bottom" className="mail-toast">
+        {toast && <>
           <span style={{ color: "bad" in toast && toast.bad ? "var(--danger)" : undefined }}>{toast.text}</span>
           {"undo" in toast && <button className="btn btn-sm" onClick={() => undo(toast)}>Undo</button>}
           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setToast(null)} aria-label="Dismiss"><I.x style={{ width: 14 }} /></button>
-        </div>
-      )}
+        </>}
+      </Toast>
     </div>
   );
 }

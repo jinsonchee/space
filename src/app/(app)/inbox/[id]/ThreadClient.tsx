@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import type { Attachment, GLabel, Message } from "@/lib/gmail";
 import type { MemberLite, Label, GoalLite } from "@/lib/queries";
 import { threadAction, discardMailDraft } from "../../../actions/gmail";
+import { AnimatePresence } from "motion/react";
 import { TaskModal } from "../../tasks/TaskModal";
+import { Sheet } from "@/components/Sheet";
 import { Composer, esc, kb, type ComposeInit } from "../Composer";
 import { UNDO_KEY } from "../InboxClient";
 import { I } from "@/components/Icons";
@@ -167,8 +169,11 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
         )}
       </div>
 
-      {preview && <PreviewModal a={preview} onClose={() => setPreview(null)} />}
+      <Sheet open={!!preview} onClose={() => setPreview(null)} label={preview?.filename ?? "Attachment"} width={preview?.mimeType === "application/pdf" ? "min(960px, 100%)" : "min(820px, 100%)"}>
+        {preview && <Preview a={preview} onClose={() => setPreview(null)} />}
+      </Sheet>
 
+      <AnimatePresence>
       {task && (
         <TaskModal
           task={null}
@@ -178,6 +183,7 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
           onSaved={() => setNote({ t: "Task created ✓ It's on the Tasks page." })}
         />
       )}
+      </AnimatePresence>
     </>
   );
 }
@@ -195,12 +201,11 @@ const attachUrl = (a: Attachment, view: boolean) =>
   `/api/google/attachment?${new URLSearchParams({ m: a.messageId, a: a.attachmentId, name: a.filename, t: a.mimeType, ...(view ? { view: "1" } : {}) })}`;
 
 /** Look at an attachment first; download only if you want to keep it. */
-function PreviewModal({ a, onClose }: { a: Attachment; onClose: () => void }) {
+function Preview({ a, onClose }: { a: Attachment; onClose: () => void }) {
   const canView = PREVIEWABLE.has(a.mimeType);
   const isPdf = a.mimeType === "application/pdf";
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === "Escape" && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={a.filename} style={{ width: isPdf ? "min(960px, 100%)" : "min(820px, 100%)" }}>
+    <>
         <div className="row between" style={{ gap: 10, marginBottom: 14 }}>
           <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {a.filename} <span className="small faint">{kb(a.size)}</span></strong>
           <div className="row" style={{ gap: 6 }}>
@@ -216,8 +221,7 @@ function PreviewModal({ a, onClose }: { a: Attachment; onClose: () => void }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={attachUrl(a, true)} alt={a.filename} style={{ display: "block", maxWidth: "100%", maxHeight: "70dvh", margin: "0 auto", borderRadius: 12 }} />
         )}
-      </div>
-    </div>
+    </>
   );
 }
 

@@ -1,20 +1,36 @@
-import { ComingSoon } from "@/components/ComingSoon";
-import { requireMember } from "@/lib/auth";
-import type { PetKind } from "@/lib/sprites";
+import Link from "next/link";
+import { requireMember, atLeast } from "@/lib/auth";
+import { getPosts } from "@/lib/posts";
+import { getYouTube } from "@/lib/youtube";
+import { getInstagram } from "@/lib/instagram";
+import { getTikTok } from "@/lib/tiktok";
+import PostsClient from "./PostsClient";
 
-export default async function Page() {
+export const dynamic = "force-dynamic";
+
+export default async function PostStatsPage() {
   const me = await requireMember();
+  const [{ posts, historyDays }, yt, ig, tt] = await Promise.all([getPosts(), getYouTube(), getInstagram(), getTikTok()]);
+  const linked = [yt.channel ? `YouTube: ${yt.channel.title}` : null, ig ? `Instagram: @${ig.username}` : null, tt ? `TikTok: @${tt.username}` : null].filter(Boolean).join(" · ");
+  const syncedAt = [yt.channel?.synced_at, ig?.synced_at, tt?.synced_at].filter((x): x is string => Boolean(x)).sort().pop() ?? null;
+  const isAdmin = atLeast(me, "admin");
   return (
-    <ComingSoon
-      pet={me.avatar.pet as PetKind}
-      title="Post Stats"
-      blurb="How every post is doing, across every platform."
-      points={[
-        "YouTube, Instagram, TikTok and Facebook posts in one feed",
-        "Views, likes, comments, shares and saves per post",
-        "Your best posts this week, at a glance",
-        "Follower stats on Home update themselves (no more manual entry)",
-      ]}
-    />
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Post Stats</h1>
+          <p className="muted">How every post is doing{linked ? ` · ${linked}` : ""}</p>
+        </div>
+      </div>
+      {!yt.channel && !ig && !tt ? (
+        <div className="card empty">
+          <p style={{ fontWeight: 600, color: "var(--text)" }}>No channels linked yet</p>
+          <p className="small" style={{ margin: "6px 0 14px" }}>Connect YouTube, Instagram or TikTok in Settings and every post&apos;s numbers show up here, updated daily.</p>
+          {isAdmin && <Link className="btn btn-accent" href="/settings#youtube">Go to Settings</Link>}
+        </div>
+      ) : (
+        <PostsClient posts={JSON.parse(JSON.stringify(posts))} historyDays={historyDays} isAdmin={isAdmin} syncedAt={syncedAt} />
+      )}
+    </>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
+import { SPRING_FAST } from "@/lib/motion";
 import { I } from "./Icons";
 import { SpaceIcon } from "./Logo";
 import { Photo, ArtistLogo } from "./Photo";
@@ -11,8 +13,8 @@ export const NAV: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: "tasks" },
   { href: "/week", label: "My Week", icon: "week" },
   { href: "/inbox", label: "Inbox", icon: "inbox" },
-  { href: "/trends", label: "Trends", icon: "trends", soon: true },
-  { href: "/socials", label: "Post Stats", icon: "socials", soon: true },
+  { href: "/trends", label: "Trends", icon: "trends" },
+  { href: "/socials", label: "Post Stats", icon: "socials" },
 ];
 const NAV2: NavItem[] = [
   { href: "/team", label: "Team", icon: "team" },
@@ -41,8 +43,10 @@ export function Shell({ artist, logo, me, isAdmin, children }: { artist: string;
   );
   const link = (n: NavItem) => {
     const Icon = I[n.icon];
+    const on = active(path, n.href);
     return (
-      <Link key={n.href} href={n.href} className="nav-link" aria-current={active(path, n.href) ? "page" : undefined}>
+      <Link key={n.href} href={n.href} className="nav-link" aria-current={on ? "page" : undefined}>
+        {on && <motion.span layoutId="nav-pill" className="nav-pill" transition={SPRING_FAST} />}
         <Icon />
         {n.label}
         {n.soon && <span className="nav-soon">SOON</span>}
@@ -81,6 +85,7 @@ export function Shell({ artist, logo, me, isAdmin, children }: { artist: string;
           const on = n.href === "/more" ? ["/more", "/inbox", "/trends", "/socials", "/settings", "/profile"].some((p) => path.startsWith(p)) : active(path, n.href);
           return (
             <Link key={n.href} href={n.href} aria-current={on ? "page" : undefined}>
+              {on && <motion.span layoutId="tab-pill" className="tab-pill" transition={SPRING_FAST} />}
               <Icon />
               {n.label}
             </Link>

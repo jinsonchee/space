@@ -3,6 +3,9 @@ import { sql, getSettings } from "@/lib/db";
 import { notify } from "@/lib/notify";
 import { todayIn, localHourAndDay, mondayOf, addDays } from "@/lib/dates";
 import { syncYouTube } from "@/lib/youtube";
+import { syncTrends } from "@/lib/trends";
+import { syncInstagram } from "@/lib/instagram";
+import { syncTikTok } from "@/lib/tiktok";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,8 @@ export const dynamic = "force-dynamic";
  *  - Monday morning: weekly overview (+ email)
  *  - Every morning: tasks due today / overdue (in-app)
  *  - Every run: refresh YouTube channel numbers (if linked)
+ *  - Once a day: Daily Trends from YouTube
+ *  - Every run: Instagram and TikTok followers + posts (if connected)
  * On-hold tasks are paused on purpose: no due/overdue nudges, just a count on Monday.
  */
 export async function GET(req: Request) {
@@ -110,5 +115,8 @@ export async function GET(req: Request) {
   }
 
   const youtube = await syncYouTube().catch(() => "error");
-  return NextResponse.json({ ok: true, ran: done, youtube, local: { today, hour, weekday } });
+  const trends = await syncTrends().catch(() => "error");
+  const instagram = await syncInstagram().catch(() => "error");
+  const tiktok = await syncTikTok().catch(() => "error");
+  return NextResponse.json({ ok: true, ran: done, youtube, trends, instagram, tiktok, local: { today, hour, weekday } });
 }

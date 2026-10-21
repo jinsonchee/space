@@ -13,6 +13,8 @@ import TodayCard from "./TodayCard";
 import InboxCard from "./InboxCard";
 import { listInbox } from "@/lib/gmail";
 import { getYouTube } from "@/lib/youtube";
+import { getInstagram } from "@/lib/instagram";
+import { getTikTok } from "@/lib/tiktok";
 import { when } from "@/lib/when";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
@@ -51,6 +53,8 @@ export default async function Home() {
   const calendar = eventsBetween(me.id, today, today, s.timezone);
   const inbox = listInbox(me.id, { unreadOnly: true, max: 3 });
   const youtube = getYouTube();
+  const instagram = getInstagram();
+  const tiktok = getTikTok();
   const [people, latest, past, myTasks, labels, todos, goals, streak] = await Promise.all([
     sql<{ id: string; name: string; role_label: string; avatar: AvatarConfig; access: string }[]>`
       select id, name, role_label, avatar, access from members order by case access when 'master' then 0 else 1 end, created_at`,
@@ -70,7 +74,7 @@ export default async function Home() {
   const todayEvents = cal.state === "ok" ? eventsOn(cal.events, today, s.timezone) : [];
   const calState = cal.state === "off" ? (calendarConfigured() ? "connect" : null) : cal.state;
   const mail = await inbox;
-  const auto = new Set((await youtube).channel ? ["youtube"] : []);
+  const auto = new Set([...((await youtube).channel ? ["youtube"] : []), ...((await instagram)?.status === "ok" ? ["instagram"] : []), ...((await tiktok)?.status === "ok" ? ["tiktok"] : [])]);
   const mailCard = mail.state === "off" ? (calendarConfigured() ? { state: "connect" as const } : null) : mail;
   const mailTimes = mail.state === "ok" ? Object.fromEntries(mail.threads.map((t) => [t.id, when(t.date, s.timezone)])) : {};
   const now = Object.fromEntries(latest.map((r) => [r.platform, Number(r.value)]));

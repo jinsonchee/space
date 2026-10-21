@@ -63,7 +63,7 @@ export async function saveChannel(handle: string, channel: YouTubeChannel) {
     on conflict (platform, captured_on) do update set value = excluded.value, source = 'youtube'`;
 }
 
-/** Daily refresh (called by the cron). */
+/** Daily refresh (called by the cron): channel numbers + every video's stats. */
 export async function syncYouTube() {
   if (!youtubeConfigured()) return "off";
   const { handle, channel } = await getYouTube();
@@ -71,5 +71,75 @@ export async function syncYouTube() {
   const r = await lookupChannel(channel.id);
   if (!r.ok) return `error: ${r.error}`;
   await saveChannel(handle, r.channel);
-  return "ok";
+  const v = await syncVideos(channel.id);
+  return `ok · ${v} videos`;
+}
+
+const yt = async <T>(path: string, params: Record<string, string>) => {
+  const res = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${new URLSearchParams({ ...params, key: process.env.YOUTUBE_API_KEY! })}`, { signal: AbortSignal.timeout(10000), cache: "no-store" });
+  if (!res.ok) { console.error(`[youtube] ${path} → ${res.status}`); return null; }
+  return (await res.json()) as T;
+};
+
+/** "PT1M5S" → 65 */
+const seconds = (iso = "") => {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  return m ? Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0) : 0;
+};
+
+/**
+ * Shorts can be up to 3 minutes — as long as many music videos — so for 1–3 minute videos ask
+ * YouTube once (the /shorts/ address only works for Shorts) and remember the answer.
+ */
+async function isShort(id: string, secs: number) {
+  if (secs === 0 || secs > 180) return false;
+  if (secs <= 60) return true;
+  const [known] = await sql<{ kind: string }[]>`select kind from posts where platform = 'youtube' and post_id = ${id}`;
+  if (known) return known.kind === "short";
+  try {
+    const r = await fetch(`https://www.youtube.com/shorts/${id}`, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(5000) });
+    return r.status === 200;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Saves every upload (up to the latest 500) and today's views/likes/comments for each.
+ * Costs about 1 quota unit per 50 videos for the list + 1 per 50 for the stats.
+ */
+export async function syncVideos(channelId: string) {
+  if (!/^UC[\w-]{22}$/.test(channelId)) return 0;
+  const uploads = `UU${channelId.slice(2)}`; // every channel's "uploads" playlist
+  const ids: string[] = [];
+  let page: string | undefined;
+  do {
+    const r = await yt<{ items?: { contentDetails: { videoId: string } }[]; nextPageToken?: string }>("playlistItems", { part: "contentDetails", playlistId: uploads, maxResults: "50", ...(page ? { pageToken: page } : {}) });
+    if (!r) break;
+    ids.push(...(r.items ?? []).map((i) => i.contentDetails.videoId));
+    page = r.nextPageToken;
+  } while (page && ids.length < 500);
+  const s = await getSettings();
+  const today = todayIn(s!.timezone);
+  let saved = 0;
+  for (let i = 0; i < ids.length; i += 50) {
+    const r = await yt<{ items?: { id: string; snippet: { title: string; publishedAt: string; thumbnails?: Record<string, { url: string }> }; statistics: { viewCount?: string; likeCount?: string; commentCount?: string }; contentDetails: { duration?: string } }[] }>(
+      "videos", { part: "snippet,statistics,contentDetails", id: ids.slice(i, i + 50).join(",") });
+    for (const v of r?.items ?? []) {
+      const th = v.snippet.thumbnails;
+      const thumb = (th?.medium ?? th?.high ?? th?.default)?.url ?? null;
+      const short = await isShort(v.id, seconds(v.contentDetails.duration));
+      await sql`
+        insert into posts (platform, post_id, title, url, thumbnail, kind, published_at)
+        values ('youtube', ${v.id}, ${v.snippet.title}, ${`https://www.youtube.com/${short ? "shorts/" : "watch?v="}${v.id}`}, ${thumb}, ${short ? "short" : "video"}, ${v.snippet.publishedAt})
+        on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, kind = excluded.kind, published_at = excluded.published_at`;
+      const st = v.statistics;
+      await sql`
+        insert into post_snapshots (platform, post_id, captured_on, views, likes, comments)
+        values ('youtube', ${v.id}, ${today}, ${st.viewCount ? Number(st.viewCount) : null}, ${st.likeCount ? Number(st.likeCount) : null}, ${st.commentCount ? Number(st.commentCount) : null})
+        on conflict (platform, post_id, captured_on) do update set views = excluded.views, likes = excluded.likes, comments = excluded.comments`;
+      saved++;
+    }
+  }
+  return saved;
 }

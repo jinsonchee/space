@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/db";
 import { currentMember } from "@/lib/auth";
 import { inkFor, isHex } from "@/lib/color";
 import { BRAND } from "@/lib/brand";
+import { MotionProvider } from "@/components/MotionProvider";
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings().catch(() => null);
@@ -19,16 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = me?.theme ?? "dark";
   return (
     <html lang="en" data-theme={theme} style={{ ["--accent" as string]: accent, ["--accent-ink" as string]: inkFor(accent) }}>
-      <head>
-        <link rel="preconnect" href="https://api.fontshare.com" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-      </head>
-      <body>{children}</body>
+      <body><MotionProvider>{children}</MotionProvider></body>
     </html>
   );
 }

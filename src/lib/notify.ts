@@ -48,7 +48,7 @@ async function sendEmail(memberId: string, subject: string, body: string, link?:
   const href = appUrl && link ? `${appUrl}${link}` : appUrl;
   const accent = s?.accent ?? "#1ed760";
   const html = `
-  <div style="font-family:Inter,Arial,sans-serif;background:#0f0f12;padding:32px;color:#f4f4f5">
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:#0f0f12;padding:32px;color:#f4f4f5">
     <div style="max-width:480px;margin:0 auto;background:#18181c;border-radius:20px;padding:28px">
       <div style="font-size:13px;color:#a1a1aa;margin-bottom:12px">${escapeHtml(space)}</div>
       <div style="font-size:22px;font-weight:700;letter-spacing:-0.5px;margin-bottom:10px">${escapeHtml(subject)}</div>

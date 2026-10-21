@@ -123,6 +123,18 @@ Give one short step at a time, with the direct link, and wait for "done" each ti
    - The **Client secret** must never go through chat or a visible terminal prompt (the plain `vercel env add` prompt echoes it). Write a small script in the temp clone that does `read -rsp` (hidden), strips whitespace, checks it starts with `GOCSPX-`, and pipes it to `vercel env add GOOGLE_CLIENT_SECRET --environment production --sensitive --force`; run it in a terminal tab for the artist to paste into.
 7. Redeploy, then the artist opens `https://<domain>/profile` → **Google** card → **Turn on** Calendar and/or Gmail. Tell them first: Google will say "Google hasn't verified this app" → **Advanced** → **Go to … (unsafe)** → keep every box ticked → **Continue**. Expect a green "Connected! ✓".
 8. **YouTube stats (optional, 3 min):** https://console.cloud.google.com/apis/library/youtube.googleapis.com → **Enable**. Then https://console.cloud.google.com/apis/credentials → **+ Create credentials → API key** → in the key's settings set **API restrictions → Restrict key → YouTube Data API v3** → **Save**. Save it as `YOUTUBE_API_KEY` with the same hidden-paste script approach as the client secret (`--sensitive`), redeploy, then the artist opens **Settings → YouTube stats** and enters their channel handle (e.g. `@layyi`). Subscribers then update daily (YouTube rounds public counts).
+9. **Instagram stats (optional, 5 min; uses the publisher's Meta app "SPACE-IG", so the artist needs no Meta account):**
+   - The artist's Instagram must be a **Creator or Business** account (Instagram app → Settings → Account type).
+   - Publisher: in https://developers.facebook.com/apps → SPACE-IG → **App roles → Roles → Add people → Instagram tester** → the artist's Instagram username.
+   - Artist: accept at https://www.instagram.com/accounts/manage_access/ → **Tester invites** → Accept.
+   - Publisher: SPACE-IG → Instagram use case → **API setup with Instagram login → Business login settings → OAuth redirect URIs** → add `https://<domain>/api/instagram/callback` → Save.
+   - Add `INSTAGRAM_APP_ID` (not secret, stdin) and `INSTAGRAM_APP_SECRET` (hidden-paste script, `--sensitive`) to the artist's Vercel, redeploy.
+   - Artist: **Settings → Instagram stats → Connect Instagram** → log in → Allow.
+10. **TikTok stats (optional, 5 min; uses the publisher's TikTok app "SPACE" in Sandbox, max 10 artists):**
+   - Publisher: https://developers.tiktok.com → Manage apps → SPACE → **Sandbox** → **Target Users → Add account** → the artist logs in to their TikTok (QR code on their phone).
+   - Publisher: same page → Login Kit → **Redirect URI (Web) → Add a URI** → `https://<domain>/api/tiktok/callback` → **Apply changes**.
+   - Add `TIKTOK_CLIENT_KEY` (not secret) and `TIKTOK_CLIENT_SECRET` (hidden-paste, `--sensitive`) from the Sandbox's Credentials to the artist's Vercel, redeploy.
+   - Artist: **Settings → TikTok stats → Connect TikTok** → Authorize.
 If connecting fails, `vercel logs` shows a `[calendar] connect failed: …` line with the reason (e.g. `invalid_client` = wrong secret; "access blocked … being tested" = app still in Testing).
 
 ## 9. Remove the publisher's access (do not skip)

@@ -5,6 +5,7 @@ import { MemberForm, type EditableMember } from "@/components/MemberForm";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { Photo } from "@/components/Photo";
 import { I } from "@/components/Icons";
+import { Sheet } from "@/components/Sheet";
 
 type M = EditableMember & { photo: string | null; open: number };
 const ACCESS_LABEL: Record<Access, string> = { master: "Artist · Master", admin: "Admin", member: "Member" };
@@ -40,9 +41,9 @@ export default function TeamClient({ members, viewer }: { members: M[]; viewer: 
         ))}
       </div>
 
-      {editing && (
-        <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && setEditing(null)}>
-          <div className="modal" role="dialog" aria-modal="true">
+      <Sheet open={!!editing} onClose={() => setEditing(null)} label={editing === "new" ? "Add someone" : editing?.name ?? "Edit"}>
+        {editing && (
+          <div key={editing === "new" ? "new" : editing.id}>
             <div className="row between" style={{ marginBottom: 16 }}>
               <h2>{editing === "new" ? "Add someone" : editing.name}</h2>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setEditing(null)} aria-label="Close"><I.x style={{ width: 16 }} /></button>
@@ -50,8 +51,8 @@ export default function TeamClient({ members, viewer }: { members: M[]; viewer: 
             {editing !== "new" && <div style={{ marginBottom: 18 }}><PhotoUpload memberId={editing.id} name={editing.name} src={editing.photo} /></div>}
             <MemberForm member={editing === "new" ? null : editing} viewer={viewer} onDone={() => setEditing(null)} />
           </div>
-        </div>
-      )}
+        )}
+      </Sheet>
     </>
   );
 }

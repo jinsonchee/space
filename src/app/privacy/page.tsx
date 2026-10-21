@@ -33,6 +33,12 @@ export default async function PrivacyPage() {
         <h2 style={{ fontSize: 18, marginTop: 22 }}>YouTube</h2>
         <p>If the artist links their YouTube channel, the Space reads the channel&apos;s <strong>public</strong> numbers (subscribers, views, number of videos) once a day using the YouTube API, and keeps a daily subscriber count to show growth. No one signs in to YouTube for this. The Space&apos;s use of YouTube data is subject to the <a href="https://www.youtube.com/t/terms" style={{ textDecoration: "underline" }}>YouTube Terms of Service</a> and <a href="https://policies.google.com/privacy" style={{ textDecoration: "underline" }}>Google Privacy Policy</a>.</p>
 
+        <h2 style={{ fontSize: 18, marginTop: 22 }}>Instagram</h2>
+        <p>If the artist connects their Instagram (a Creator or Business account), the Space reads the account&apos;s follower count and, for each recent post, its likes, comments, views, reach, saves and shares, once a day. It is read-only: the Space never posts, comments or messages. The access key is encrypted and stored only in the artist&apos;s database, and is deleted when Instagram is disconnected in Settings.</p>
+
+        <h2 style={{ fontSize: 18, marginTop: 22 }}>TikTok</h2>
+        <p>If the artist connects their TikTok, the Space reads the account&apos;s follower, like and video counts and, for each recent video, its views, likes, comments and shares, once a day. It is read-only: the Space never posts or comments. The access keys are encrypted and stored only in the artist&apos;s database, and are revoked and deleted when TikTok is disconnected in Settings.</p>
+
         <h2 style={{ fontSize: 18, marginTop: 22 }}>Emails</h2>
         <p>If the artist turns on email reminders, the Space sends task and weekly reminders to your email address.</p>
 
