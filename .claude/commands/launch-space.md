@@ -101,20 +101,27 @@ In a fresh temp folder (outside this repo): `gh repo clone <artist>/space`, `ver
 add `RESEND_API_KEY` and `EMAIL_FROM` (`<Artist> 's Space <onboarding@resend.dev>` works for testing; their own domain later)
 with `printf '%s' … | vercel env add NAME production`, redeploy, then delete that folder.
 
-## 8b. Optional Google Calendar (about 10 minutes)
-Ask if they want calendar events on Home and My Week. If yes, the **artist** does the clicking in their own
-Google account (they own this app — nothing goes through the publisher). Give one short step at a time, with the
-direct link, and wait for "done" each time. `<domain>` is their production domain.
+## 8b. Optional Google: Calendar + Gmail (about 15 minutes)
+Ask if they want calendar events (Home, My Week) and their Gmail inbox in Space. If yes, the **artist** does the clicking.
+**Before anything: the artist must be signed in to Google with THEIR OWN account** (ideally their music-business account) —
+check the profile picture top-right in Google Cloud on every step. If the project is created under the publisher's Google
+account, the publisher would control access to the team's Gmail, which breaks the privacy promise. Anyone on the team can
+connect their own Google account through the artist's app later.
+Give one short step at a time, with the direct link, and wait for "done" each time. `<domain>` is their production domain.
 1. **Project:** https://console.cloud.google.com/projectcreate → name `<artist>-space` → **Create**. Make sure the project picker at the top shows it for every step below.
-2. **Calendar API:** https://console.cloud.google.com/apis/library/calendar-json.googleapis.com → **Enable**.
+2. **APIs:** https://console.cloud.google.com/apis/library/calendar-json.googleapis.com → **Enable**, then https://console.cloud.google.com/apis/library/gmail.googleapis.com → **Enable**.
 3. **Branding:** https://console.cloud.google.com/auth/overview → **Get started** → App name `<Artist>'s Space`, support email → **Next** → **External** → **Next** → contact email → **Next** → tick the policy → **Continue** → **Create** (the page must stop saying "not configured yet").
    Then https://console.cloud.google.com/auth/branding → **Application home page** `https://<domain>`, **privacy policy** `https://<domain>/privacy`, **Authorized domains** → add `<domain>` → **Save**. (Google won't allow publishing without these.)
-4. **Data access:** https://console.cloud.google.com/auth/scopes → **Add or remove scopes** → under "Manually add scopes" paste `https://www.googleapis.com/auth/calendar.events.readonly` → **Add to table** → also tick `openid` and `.../auth/userinfo.email` → **Update** → **Save**.
+4. **Data access:** https://console.cloud.google.com/auth/scopes → **Add or remove scopes** → under "Manually add scopes" paste these three lines:
+   `https://www.googleapis.com/auth/calendar.events.readonly`
+   `https://www.googleapis.com/auth/gmail.readonly`
+   `https://www.googleapis.com/auth/gmail.send`
+   → **Add to table** → also tick `openid` and `.../auth/userinfo.email` → **Update** → **Save**. (Gmail shows under "restricted scopes" — expected. Google allows this unverified for personal-use apps under 100 users; tested 2026-10.)
 5. **Publish:** https://console.cloud.google.com/auth/audience → **Publish app** → **Confirm** (status "In production"). Ignore the verification notice — unverified is fine for up to 100 people; Testing mode would expire everyone's connection every 7 days.
 6. **Client:** https://console.cloud.google.com/auth/clients → **Create client** → **Web application**, name `Space`, **Authorized redirect URIs** → `https://<domain>/api/google/callback` → **Create**.
    - The **Client ID** isn't secret: the artist can paste it in chat → `printf '%s' "<id>" | npx --yes vercel@latest env add GOOGLE_CLIENT_ID --environment production --sensitive` (in a fresh linked temp clone, as in step 8).
    - The **Client secret** must never go through chat or a visible terminal prompt (the plain `vercel env add` prompt echoes it). Write a small script in the temp clone that does `read -rsp` (hidden), strips whitespace, checks it starts with `GOCSPX-`, and pipes it to `vercel env add GOOGLE_CLIENT_SECRET --environment production --sensitive --force`; run it in a terminal tab for the artist to paste into.
-7. Redeploy, then the artist opens `https://<domain>/profile` → **Connect Google Calendar**. Tell them first: Google will say "Google hasn't verified this app" → **Advanced** → **Go to … (unsafe)** → keep the calendar box ticked → **Continue**. Expect a green "Connected!".
+7. Redeploy, then the artist opens `https://<domain>/profile` → **Google** card → **Turn on** Calendar and/or Gmail. Tell them first: Google will say "Google hasn't verified this app" → **Advanced** → **Go to … (unsafe)** → keep every box ticked → **Continue**. Expect a green "Connected! ✓".
 If connecting fails, `vercel logs` shows a `[calendar] connect failed: …` line with the reason (e.g. `invalid_client` = wrong secret; "access blocked … being tested" = app still in Testing).
 
 ## 9. Remove the publisher's access (do not skip)

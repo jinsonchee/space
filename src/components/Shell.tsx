@@ -10,7 +10,7 @@ export const NAV: NavItem[] = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/tasks", label: "Tasks", icon: "tasks" },
   { href: "/week", label: "My Week", icon: "week" },
-  { href: "/inbox", label: "Inbox", icon: "inbox", soon: true },
+  { href: "/inbox", label: "Inbox", icon: "inbox" },
   { href: "/trends", label: "Trends", icon: "trends", soon: true },
   { href: "/socials", label: "Post Stats", icon: "socials", soon: true },
 ];

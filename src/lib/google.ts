@@ -4,12 +4,18 @@ import { encrypt, decrypt } from "./crypto";
 import { notify } from "./notify";
 import { tzOffset, todayIn, addDays, timeIn } from "./dates";
 
-// Google Calendar, read-only, main calendar only. Each artist uses their own Google Cloud
-// app (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). Tokens are encrypted and stored only in
-// the artist's own database.
+// Google Calendar (read-only, main calendar) and Gmail (read + send). Each artist uses their
+// own Google Cloud app (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). One connection per person
+// holds whichever features they turned on. Tokens are encrypted and stored only in the
+// artist's own database.
 
-export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
-const SCOPES = ["openid", "email", CALENDAR_SCOPE].join(" ");
+export type GoogleFeature = "calendar" | "gmail";
+export const FEATURE_SCOPES: Record<GoogleFeature, string[]> = {
+  calendar: ["https://www.googleapis.com/auth/calendar.events.readonly"],
+  gmail: ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"],
+};
+export const CALENDAR_SCOPE = FEATURE_SCOPES.calendar[0];
+const hasFeature = (scopes: string, f: GoogleFeature) => FEATURE_SCOPES[f].every((x) => scopes.split(" ").includes(x));
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const TIMEOUT = 5000; // never let a slow Google response hold up a page
 
@@ -21,17 +27,19 @@ export function redirectUri() {
   return `${process.env.APP_URL!.replace(/\/$/, "")}/api/google/callback`;
 }
 
-export function authUrl(state: string, loginHint?: string | null) {
+export function authUrl(state: string, features: GoogleFeature[]) {
   const p = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri(),
     response_type: "code",
-    scope: SCOPES,
+    scope: ["openid", "email", ...features.flatMap((f) => FEATURE_SCOPES[f])].join(" "),
     access_type: "offline", // gives a refresh token so the connection lasts
-    prompt: "consent", // always return a refresh token, even on reconnect
+    // Always show the account picker (people often have several Google accounts) and the
+    // consent screen (so Google always returns a refresh token, even on reconnect).
+    // No login_hint: with several signed-in accounts it made Google's sign-in page error.
+    prompt: "select_account consent",
     state,
   });
-  if (loginHint) p.set("login_hint", loginHint);
   return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
 }
 
@@ -48,29 +56,43 @@ async function tokenRequest(body: Record<string, string>) {
 }
 
 /** Finishes the Google sign-in: swaps the one-time code for tokens and saves them encrypted. */
-export async function connectWithCode(memberId: string, code: string) {
+export async function connectWithCode(memberId: string, code: string, features: GoogleFeature[]) {
   const { ok, data } = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: redirectUri() });
   if (!ok || !data.refresh_token) {
     // Log Google's error code only (never tokens or secrets) so failed connections can be diagnosed.
     console.error(`[calendar] connect failed: ${!ok ? `google error ${data.error ?? "unknown"}` : "no refresh token returned"}`);
     return { ok: false as const, reason: "exchange" };
   }
-  if (!data.scope?.split(" ").includes(CALENDAR_SCOPE)) return { ok: false as const, reason: "scope" };
+  // People can untick boxes on Google's screen: keep only the features they fully granted.
+  const granted = (["calendar", "gmail"] as GoogleFeature[]).filter((f) => hasFeature(data.scope ?? "", f));
+  if (!features.every((f) => granted.includes(f))) return { ok: false as const, reason: "scope" };
+  const scopes = granted.flatMap((f) => FEATURE_SCOPES[f]).join(" ");
   // The id_token comes straight from Google over HTTPS; we only read the email from it.
   let email: string | null = null;
   try { email = JSON.parse(Buffer.from(data.id_token!.split(".")[1], "base64url").toString()).email ?? null; } catch {}
   await sql`
-    insert into calendar_connections (member_id, google_email, refresh_token, access_token, access_expires_at, status, connected_at)
-    values (${memberId}, ${email}, ${encrypt(data.refresh_token)}, ${encrypt(data.access_token)}, ${new Date(Date.now() + data.expires_in * 1000)}, 'ok', now())
+    insert into calendar_connections (member_id, google_email, refresh_token, access_token, access_expires_at, status, connected_at, scopes)
+    values (${memberId}, ${email}, ${encrypt(data.refresh_token)}, ${encrypt(data.access_token)}, ${new Date(Date.now() + data.expires_in * 1000)}, 'ok', now(), ${scopes})
     on conflict (member_id) do update set google_email = excluded.google_email, refresh_token = excluded.refresh_token,
-      access_token = excluded.access_token, access_expires_at = excluded.access_expires_at, status = 'ok', connected_at = now()`;
+      access_token = excluded.access_token, access_expires_at = excluded.access_expires_at, status = 'ok', connected_at = now(), scopes = excluded.scopes`;
   return { ok: true as const };
 }
 
 export async function getConnection(memberId: string) {
-  const [c] = await sql<{ google_email: string | null; status: "ok" | "expired"; connected_at: string }[]>`
-    select google_email, status, connected_at from calendar_connections where member_id = ${memberId}`;
-  return c ?? null;
+  const [c] = await sql<{ google_email: string | null; status: "ok" | "expired"; connected_at: string; scopes: string }[]>`
+    select google_email, status, connected_at, scopes from calendar_connections where member_id = ${memberId}`;
+  if (!c) return null;
+  return { ...c, features: (["calendar", "gmail"] as GoogleFeature[]).filter((f) => hasFeature(c.scopes, f)) };
+}
+
+/** Stops Space using one feature (the Google permission stays until they fully disconnect). */
+export async function turnOff(memberId: string, feature: GoogleFeature) {
+  const drop = FEATURE_SCOPES[feature];
+  const c = await getConnection(memberId);
+  if (!c) return;
+  const keep = c.scopes.split(" ").filter((x) => x && !drop.includes(x));
+  if (!keep.length) return disconnect(memberId);
+  await sql`update calendar_connections set scopes = ${keep.join(" ")} where member_id = ${memberId}`;
 }
 
 export async function disconnect(memberId: string) {
@@ -81,21 +103,21 @@ export async function disconnect(memberId: string) {
 }
 
 /** Marks the connection expired and has the dove ask them to reconnect (once per connection). */
-async function markExpired(memberId: string) {
+export async function markExpired(memberId: string) {
   const rows = await sql<{ connected_at: string }[]>`
     update calendar_connections set status = 'expired' where member_id = ${memberId} and status = 'ok' returning connected_at::text`;
   if (!rows.length) return;
   await notify({
     memberId,
     kind: "calendar",
-    title: "Reconnect your Google Calendar 🗓️",
-    body: "Your calendar connection has expired, so your events aren't showing. It takes 10 seconds to reconnect.",
-    link: "/profile#calendar",
+    title: "Reconnect your Google account 🗓️",
+    body: "Your Google connection has expired, so your calendar and email aren't showing. It takes 10 seconds to reconnect.",
+    link: "/profile#google",
     dedupeKey: `calendar-expired:${rows[0].connected_at}`,
   });
 }
 
-async function accessToken(memberId: string, forceRefresh = false): Promise<string | null> {
+export async function accessToken(memberId: string, forceRefresh = false): Promise<string | null> {
   const [c] = await sql<{ refresh_token: string; access_token: string | null; access_expires_at: Date | null; status: string }[]>`
     select refresh_token, access_token, access_expires_at, status from calendar_connections where member_id = ${memberId}`;
   if (!c || c.status !== "ok") return null;
@@ -143,7 +165,7 @@ type GEvent = {
 export async function eventsBetween(memberId: string, from: string, to: string, tz: string): Promise<CalendarResult> {
   if (!calendarConfigured()) return { state: "off" };
   const conn = await getConnection(memberId);
-  if (!conn) return { state: "off" };
+  if (!conn || !conn.features.includes("calendar")) return { state: "off" };
   if (conn.status === "expired") return { state: "expired" };
   try {
     const p = new URLSearchParams({

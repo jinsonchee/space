@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskRow, MemberLite, Label, GoalLite } from "@/lib/queries";
 import { saveTask, deleteTask, nudgeTask, createLabel } from "../../actions/tasks";
@@ -9,11 +9,11 @@ import { STATUSES, PRIORITIES } from "@/lib/task-meta";
 
 const LABEL_COLORS = ["#8b5cf6", "#ff4fa3", "#ffb020", "#3b82f6", "#1ed760", "#22d3ee", "#ff6a3d"];
 
-export function TaskModal({ task, members, labels: initialLabels, goals, meId, onClose }: { task: TaskRow | null; members: MemberLite[]; labels: Label[]; goals: GoalLite[]; meId: string; onClose: () => void }) {
+export function TaskModal({ task, draft, members, labels: initialLabels, goals, meId, onClose, onSaved }: { task: TaskRow | null; draft?: { title: string; description: string }; members: MemberLite[]; labels: Label[]; goals: GoalLite[]; meId: string; onClose: () => void; onSaved?: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [title, setTitle] = useState(task?.title ?? "");
-  const [description, setDescription] = useState(task?.description ?? "");
+  const [title, setTitle] = useState(task?.title ?? draft?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? draft?.description ?? "");
   const [status, setStatus] = useState<TaskRow["status"]>(task?.status ?? "todo");
   const [priority, setPriority] = useState<TaskRow["priority"]>(task?.priority ?? "normal");
   const [due, setDue] = useState(task?.due_date ?? "");
@@ -23,6 +23,18 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
   const [goalId, setGoalId] = useState<string>(task?.goal_id ?? "");
   const [newLabel, setNewLabel] = useState("");
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  // Ask before throwing away typed changes (an accidental click outside shouldn't lose work).
+  const snapshot = JSON.stringify({ title, description, status, priority, due, assignees, labelIds, goalId });
+  const initial = useRef(snapshot);
+  const dirty = snapshot !== initial.current;
+  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (confirmClose) setConfirmClose(false); else requestClose(); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const toggle = (arr: string[], set: (v: string[]) => void, id: string) => set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
 
@@ -31,6 +43,7 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
       const r = await saveTask({ id: task?.id, title, description, status, priority, due_date: due || null, assignees, labels: labelIds, goal_id: goalId || null });
       if (!r.ok) return setMsg({ text: r.error, bad: true });
       router.refresh();
+      onSaved?.();
       onClose();
     });
 
@@ -63,11 +76,11 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
   const othersAssigned = (task?.assignees ?? []).some((a) => a !== meId);
 
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && requestClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={task ? "Edit task" : "New task"}>
         <div className="row between" style={{ marginBottom: 16 }}>
           <span className="eyebrow">{task ? "Edit task" : "New task"}</span>
-          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label="Close"><I.x style={{ width: 16 }} /></button>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={requestClose} aria-label="Close"><I.x style={{ width: 16 }} /></button>
         </div>
         <div className="field">
           <label className="label" htmlFor="task-title">Task</label>
@@ -167,11 +180,23 @@ export function TaskModal({ task, members, labels: initialLabels, goals, meId, o
         <div className="row between" style={{ marginTop: 20 }}>
           {task ? <button className="btn btn-ghost btn-danger btn-sm" onClick={remove} disabled={pending}><I.trash style={{ width: 15 }} /> Delete</button> : <span />}
           <div className="row" style={{ gap: 8 }}>
-            <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button className="btn btn-ghost" onClick={requestClose}>Cancel</button>
             <button className="btn btn-accent" onClick={save} disabled={pending || !title.trim()} title={!title.trim() ? "Give the task a name first" : undefined}>{pending ? "Saving…" : task ? "Save" : "Create task"}</button>
           </div>
         </div>
       </div>
+        {confirmClose && (
+          <div className="modal-confirm" role="alertdialog" aria-modal="true" aria-labelledby="discard-title">
+            <div className="card" style={{ width: "min(340px, 100%)", padding: 20, textAlign: "center" }}>
+              <h3 id="discard-title" style={{ fontSize: 18 }}>{task ? "Discard your changes?" : "Discard this task?"}</h3>
+              <p className="small muted" style={{ margin: "6px 0 16px" }}>{task ? "Your edits won't be saved." : "What you've typed won't be saved."}</p>
+              <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+                <button className="btn" autoFocus onClick={() => setConfirmClose(false)}>Keep editing</button>
+                <button className="btn btn-danger" onClick={onClose}>Discard</button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

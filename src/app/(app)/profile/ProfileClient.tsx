@@ -6,9 +6,9 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { changeMyPin, setTheme } from "../../actions/members";
 import { logout } from "../../actions/auth";
 import { I } from "@/components/Icons";
-import { CalendarCard, type CalendarInfo } from "./CalendarCard";
+import { GoogleCard, type GoogleInfo } from "./GoogleCard";
 
-export default function ProfileClient({ me, calendar, calendarResult }: { me: Member; calendar: CalendarInfo; calendarResult: string | null }) {
+export default function ProfileClient({ me, google, googleResult }: { me: Member; google: GoogleInfo; googleResult: string | null }) {
   const [pending, start] = useTransition();
   const [pins, setPins] = useState({ cur: "", next: "", again: "" });
   const [pinMsg, setPinMsg] = useState<{ t: string; bad?: boolean } | null>(null);
@@ -43,7 +43,7 @@ export default function ProfileClient({ me, calendar, calendarResult }: { me: Me
           </section>
 
           <div className="col" style={{ gap: 16 }}>
-            <CalendarCard info={calendar} result={calendarResult} />
+            <GoogleCard info={google} result={googleResult} />
 
             <section className="card">
               <h2 style={{ marginBottom: 14 }}>Appearance</h2>

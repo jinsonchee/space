@@ -10,6 +10,9 @@ import { I } from "@/components/Icons";
 import { priorityLabel, statusLabel } from "@/lib/task-meta";
 import { calendarConfigured, eventsBetween, eventsOn } from "@/lib/google";
 import TodayCard from "./TodayCard";
+import InboxCard from "./InboxCard";
+import { listInbox } from "@/lib/gmail";
+import { when } from "@/lib/when";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
 
@@ -45,6 +48,7 @@ export default async function Home() {
   const year = today.slice(0, 4);
 
   const calendar = eventsBetween(me.id, today, today, s.timezone);
+  const inbox = listInbox(me.id, { unreadOnly: true, max: 3 });
   const [people, latest, past, myTasks, labels, todos, goals, streak] = await Promise.all([
     sql<{ id: string; name: string; role_label: string; avatar: AvatarConfig; access: string }[]>`
       select id, name, role_label, avatar, access from members order by case access when 'master' then 0 else 1 end, created_at`,
@@ -63,6 +67,9 @@ export default async function Home() {
   const cal = await calendar;
   const todayEvents = cal.state === "ok" ? eventsOn(cal.events, today, s.timezone) : [];
   const calState = cal.state === "off" ? (calendarConfigured() ? "connect" : null) : cal.state;
+  const mail = await inbox;
+  const mailCard = mail.state === "off" ? (calendarConfigured() ? { state: "connect" as const } : null) : mail;
+  const mailTimes = mail.state === "ok" ? Object.fromEntries(mail.threads.map((t) => [t.id, when(t.date, s.timezone)])) : {};
   const now = Object.fromEntries(latest.map((r) => [r.platform, Number(r.value)]));
   const then = Object.fromEntries(past.map((r) => [r.platform, Number(r.value)]));
   const { hour } = localHourAndDay(s.timezone);
@@ -146,7 +153,12 @@ export default async function Home() {
         </section>
       </div>
 
-      {calState && <TodayCard cal={calState} events={todayEvents} />}
+      {(calState || mailCard) && (
+        <div className={`grid ${calState && mailCard ? "g-2" : ""}`} style={{ marginBottom: 16, alignItems: "start" }}>
+          {calState && <TodayCard cal={calState} events={todayEvents} />}
+          {mailCard && <InboxCard r={mailCard} times={mailTimes} />}
+        </div>
+      )}
 
       {crew.length > 0 && (
         <section className="card crew" style={{ marginBottom: 16 }}>

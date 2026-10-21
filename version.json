@@ -1,4 +1,4 @@
 {
-  "version": "1.4.0",
-  "notes": "Connect your Google Calendar in My profile to see today’s events on Home (with a live “Next up” line) and each day’s events in My Week. On-hold tasks no longer send overdue reminders."
+  "version": "1.5.0",
+  "notes": "Gmail is here: turn it on in My profile → Google to see your inbox in Space, read emails and preview attachments, reply with formatting and files, and turn any email into a task for the team. Home now shows your unread emails next to today’s calendar."
 }

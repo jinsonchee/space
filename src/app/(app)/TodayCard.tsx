@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { CalEvent, CalendarResult } from "@/lib/google";
 
 /** Today's Google Calendar events with a live "Now: …" / "Next up in …" line. */
@@ -13,7 +12,7 @@ export default function TodayCard({ cal, events }: { cal: CalendarResult["state"
   }, []);
 
   return (
-    <section className="card" style={{ marginBottom: 16 }}>
+    <section className="card">
       <div className="card-title">
         <div>
           <span className="eyebrow">Today</span>
@@ -24,7 +23,7 @@ export default function TodayCard({ cal, events }: { cal: CalendarResult["state"
       {cal === "connect" && (
         <div className="row between wrap" style={{ gap: 10 }}>
           <p className="small muted">See today&apos;s events here by connecting your Google Calendar.</p>
-          <Link href="/profile#calendar" className="btn btn-sm">Connect calendar</Link>
+          <a href="/api/google/connect?want=calendar" className="btn btn-sm">Connect calendar</a>
         </div>
       )}
       {cal === "expired" && (

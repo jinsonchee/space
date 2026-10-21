@@ -17,14 +17,16 @@ export default async function PrivacyPage() {
         <h2 style={{ fontSize: 18, marginTop: 22 }}>What we keep</h2>
         <p>Your name, email, role, photo and a scrambled (hashed) version of your PIN, plus the tasks, goals, to-dos and notifications your team creates. This is stored in the artist&apos;s own database and used only to run the Space.</p>
 
-        <h2 style={{ fontSize: 18, marginTop: 22 }}>Google Calendar (optional)</h2>
-        <p>If you choose <strong>Connect Google Calendar</strong>, the Space asks Google for read-only access to the events on your main calendar and your Google email address. It uses them only to show your events on your Home and My Week pages.</p>
+        <h2 style={{ fontSize: 18, marginTop: 22 }}>Google Calendar and Gmail (optional)</h2>
+        <p>In <strong>My profile → Google</strong> you can turn on either or both. Only you see your own calendar and email; teammates and the artist cannot see them.</p>
         <ul>
-          <li>Events are read from Google when you open those pages. They are <strong>not saved</strong> in the database.</li>
-          <li>The Space can never create, change or delete anything in your calendar.</li>
+          <li><strong>Calendar:</strong> read-only access to the events on your main calendar, used only to show them on your Home and My Week pages. The Space can never create, change or delete anything in your calendar.</li>
+          <li><strong>Gmail:</strong> access to read your email and to send email as you. It is used only to show your Primary inbox in the Space, let you read and download attachments, and send the replies you write and click Send on. The Space never sends email on its own, and never deletes or changes your email.</li>
+          <li>Events and emails are read from Google when you open those pages. They are <strong>not saved</strong> in the database. If you turn an email into a task, that task keeps the subject, sender, a short excerpt and a link back to the email.</li>
+          <li>The Space also reads your Google email address, to show which account is connected.</li>
           <li>The access keys Google provides are encrypted before they are stored in the artist&apos;s database.</li>
-          <li>Your calendar data is never sold, shared with anyone else, used for advertising, or used to train AI models.</li>
-          <li>You can disconnect at any time from <strong>My profile → Google Calendar → Disconnect</strong>, which deletes the keys and tells Google to revoke access. You can also remove access at <a href="https://myaccount.google.com/permissions" style={{ textDecoration: "underline" }}>myaccount.google.com/permissions</a>.</li>
+          <li>Your calendar and email data are never sold, shared with anyone else, used for advertising, or used to train AI models, and no person reads them.</li>
+          <li>You can disconnect at any time from <strong>My profile → Google → Disconnect Google</strong>, which deletes the keys and tells Google to revoke access. You can also remove access at <a href="https://myaccount.google.com/permissions" style={{ textDecoration: "underline" }}>myaccount.google.com/permissions</a>.</li>
         </ul>
         <p>The Space&apos;s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" style={{ textDecoration: "underline" }}>Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
