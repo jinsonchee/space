@@ -3,8 +3,7 @@ import { I } from "@/components/Icons";
 import { requireMember, atLeast } from "@/lib/auth";
 
 const ITEMS = [
-  { href: "/inbox", label: "Inbox", icon: "inbox" },
-  { href: "/trends", label: "Daily Trends", icon: "trends" },
+  { href: "/team", label: "Team", icon: "team" },
   { href: "/socials", label: "Post Stats", icon: "socials" },
   { href: "/profile", label: "My profile", icon: "user" },
   { href: "/settings", label: "Settings", icon: "settings", adminOnly: true },

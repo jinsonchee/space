@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { sql } from "./db";
 import { encrypt, decrypt } from "./crypto";
 import { notify } from "./notify";
@@ -130,6 +131,12 @@ export async function markExpired(memberId: string) {
   });
 }
 
+// One page can make dozens of Google calls (the Inbox makes ~27). Looking up the connection and token
+// once per page load, instead of once per call, saves dozens of queued database round trips.
+// Only the first lookup is shared; re-checks after a failure always read fresh.
+export const connectionOnce = cache((memberId: string) => getConnection(memberId));
+export const tokenOnce = cache((memberId: string) => accessToken(memberId));
+
 export async function accessToken(memberId: string, forceRefresh = false): Promise<string | null> {
   const [c] = await sql<{ refresh_token: string; access_token: string | null; access_expires_at: Date | null; status: string }[]>`
     select refresh_token, access_token, access_expires_at, status from calendar_connections where member_id = ${memberId}`;
@@ -160,6 +167,14 @@ export type CalEvent = {
   startMs: number;
   endMs: number;
   time: string; // "14:30–15:30" or "All day"
+  color: string; // the event's own Google Calendar colour, so it looks the same as in Google
+  link: string | null; // opens the event in Google Calendar
+};
+
+// Google Calendar's event colours (colorId 1–11). No colorId = the calendar's own colour (Peacock blue by default).
+const EVENT_COLORS: Record<string, string> = {
+  "1": "#7986cb", "2": "#33b679", "3": "#8e24aa", "4": "#e67c73", "5": "#f6bf26", "6": "#f4511e",
+  "7": "#039be5", "8": "#616161", "9": "#3f51b5", "10": "#0b8043", "11": "#d50000",
 };
 
 export type CalendarResult =
@@ -169,7 +184,7 @@ export type CalendarResult =
   | { state: "ok"; events: CalEvent[] };
 
 type GEvent = {
-  id: string; status?: string; summary?: string; location?: string;
+  id: string; status?: string; summary?: string; location?: string; colorId?: string; htmlLink?: string;
   start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string };
   attendees?: { self?: boolean; responseStatus?: string }[];
 };
@@ -177,7 +192,7 @@ type GEvent = {
 /** Events on the main calendar between two dates (inclusive), in the Space's timezone. */
 export async function eventsBetween(memberId: string, from: string, to: string, tz: string): Promise<CalendarResult> {
   if (!calendarConfigured()) return { state: "off" };
-  const conn = await getConnection(memberId);
+  const conn = await connectionOnce(memberId);
   if (!conn || !conn.features.includes("calendar")) return { state: "off" };
   if (conn.status === "expired") return { state: "expired" };
   try {
@@ -191,7 +206,7 @@ export async function eventsBetween(memberId: string, from: string, to: string, 
     });
     const get = (token: string) =>
       fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${p}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
-    let token = await accessToken(memberId);
+    let token = await tokenOnce(memberId);
     if (!token) return (await getConnection(memberId))?.status === "expired" ? { state: "expired" } : { state: "error" };
     let res = await get(token);
     if (res.status === 401) {
@@ -213,6 +228,8 @@ export async function eventsBetween(memberId: string, from: string, to: string, 
         return {
           id: e.id, title: e.summary?.trim() || "(No title)", location: e.location?.trim() || null, allDay, start, end, startMs, endMs,
           time: allDay ? "All day" : `${timeIn(tz, new Date(startMs))}–${timeIn(tz, new Date(endMs))}`,
+          color: EVENT_COLORS[e.colorId ?? ""] ?? "#039be5",
+          link: e.htmlLink ?? null,
         };
       });
     return { state: "ok", events };

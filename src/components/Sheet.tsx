@@ -11,7 +11,7 @@ if (typeof window !== "undefined") {
 }
 
 const PHONE = "(max-width: 640px)";
-function useIsPhone() {
+export function useIsPhone() {
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia(PHONE).matches);
   useEffect(() => {
     const mq = window.matchMedia(PHONE);

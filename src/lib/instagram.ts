@@ -108,9 +108,9 @@ export async function syncInstagram() {
     const kind = m.media_product_type === "REELS" ? "reel" : m.media_type === "CAROUSEL_ALBUM" ? "carousel" : m.media_type === "VIDEO" ? "video" : "photo";
     const title = (m.caption ?? "").split("\n")[0].slice(0, 140) || (kind === "reel" ? "Reel" : "Post");
     await sql`
-      insert into posts (platform, post_id, title, url, thumbnail, kind, published_at)
-      values ('instagram', ${m.id}, ${title}, ${m.permalink ?? null}, ${m.thumbnail_url ?? m.media_url ?? null}, ${kind}, ${m.timestamp ?? null})
-      on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, kind = excluded.kind`;
+      insert into posts (platform, post_id, title, url, thumbnail, kind, published_at, caption)
+      values ('instagram', ${m.id}, ${title}, ${m.permalink ?? null}, ${m.thumbnail_url ?? m.media_url ?? null}, ${kind}, ${m.timestamp ?? null}, ${(m.caption ?? "").slice(0, 1000)})
+      on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, kind = excluded.kind, caption = excluded.caption`;
     const ins = await ig<{ data?: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }>(`/${m.id}/insights`, token, { metric: "views,reach,saved,shares" });
     const v = (name: string) => { const d = ins.body.data?.find((x) => x.name === name); return d ? d.values?.[0]?.value ?? d.total_value?.value ?? null : null; };
     await sql`

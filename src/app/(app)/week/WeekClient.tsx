@@ -1,5 +1,5 @@
 "use client";
-import { useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import { addTodo, toggleTodo, deleteTodo, renewWeek, carryOver } from "../../actions/todos";
 import { addDays, mondayOf, prettyDay, shortDay } from "@/lib/dates";
@@ -8,10 +8,15 @@ import { I } from "@/components/Icons";
 import type { CalEvent } from "@/lib/google";
 import { EventList } from "../TodayCard";
 import { Toast } from "@/components/Toast";
+import WeekCalendar from "./WeekCalendar";
 
 export type Todo = { id: string; scope: "day" | "week"; on_date: string; text: string; done: boolean };
 
-export default function WeekClient({ todos, today, day, monday, isWeekend, events, calExpired }: { todos: Todo[]; today: string; day: string; monday: string; isWeekend: boolean; events: Record<string, CalEvent[]> | null; calExpired: boolean }) {
+export default function WeekClient({ todos, today, day, monday, isWeekend, events, calExpired, dayStarts, allEvents }: { todos: Todo[]; today: string; day: string; monday: string; isWeekend: boolean; events: Record<string, CalEvent[]> | null; calExpired: boolean; dayStarts: Record<string, number>; allEvents: CalEvent[] | null }) {
+  // Calendar (her Google Calendar as a week grid) or Plan (to-dos and weekly goals). Remembers her last choice.
+  const [view, setView] = useState<"cal" | "plan">("cal");
+  useEffect(() => { try { const v = localStorage.getItem("space_week_view"); if (v === "plan" || v === "cal") setView(v); } catch {} }, []);
+  const choose = (v: "cal" | "plan") => { setView(v); try { localStorage.setItem("space_week_view", v); } catch {} };
   const [list, apply] = useOptimistic(todos, (state: Todo[], a: { type: "toggle" | "delete"; id: string } | { type: "add"; todo: Todo }) => {
     if (a.type === "add") return [...state, a.todo];
     if (a.type === "toggle") return state.map((t) => (t.id === a.id ? { ...t, done: !t.done } : t));
@@ -49,13 +54,18 @@ export default function WeekClient({ todos, today, day, monday, isWeekend, event
           <h1>My Week</h1>
           <p className="muted">Week of {shortDay(monday)} – {shortDay(addDays(monday, 6))}</p>
         </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row wrap" style={{ gap: 6 }}>
+          <div className="seg" role="tablist" aria-label="View">
+            <button role="tab" aria-pressed={view === "cal"} onClick={() => choose("cal")}><I.calendar filled={view === "cal"} style={{ width: 16, verticalAlign: -3, marginRight: 6 }} />Calendar</button>
+            <button role="tab" aria-pressed={view === "plan"} onClick={() => choose("plan")}><I.tasks filled={view === "plan"} style={{ width: 16, verticalAlign: -3, marginRight: 6 }} />Plan</button>
+          </div>
           <Link className="btn btn-sm btn-icon" href={`/week?d=${addDays(day, -7)}`} aria-label="Previous week"><I.left style={{ width: 16 }} /></Link>
           <Link className="btn btn-sm" href="/week">This week</Link>
           <Link className="btn btn-sm btn-icon" href={`/week?d=${addDays(day, 7)}`} aria-label="Next week"><I.right style={{ width: 16 }} /></Link>
         </div>
       </div>
 
+      {view === "cal" ? <WeekCalendar monday={monday} today={today} day={day} dayStarts={dayStarts} events={allEvents} calExpired={calExpired} /> : <>
       {showRenew && (
         <div className="card" style={{ marginBottom: 16, background: "var(--accent-soft)", borderColor: "transparent" }}>
           <div className="row between wrap" style={{ gap: 12 }}>
@@ -130,6 +140,7 @@ export default function WeekClient({ todos, today, day, monday, isWeekend, event
           )}
         </section>
       </div>
+      </>}
     </>
   );
 }

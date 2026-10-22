@@ -12,14 +12,12 @@ export default function TodayCard({ cal, events }: { cal: CalendarResult["state"
   }, []);
 
   return (
-    <section className="card">
-      <div className="card-title">
-        <div>
-          <span className="eyebrow">Today</span>
-          <h2 style={{ marginTop: 4 }}>{cal === "ok" && now !== null ? liveLine(events, now) : "Your calendar"}</h2>
-        </div>
+    <section className="sec home-sched">
+      <div className="sec-head">
+        <h2>Today</h2>
         {cal === "ok" && <span className="small muted">{events.length} event{events.length === 1 ? "" : "s"}</span>}
       </div>
+      {cal === "ok" && now !== null && <p className="sched-live">{liveLine(events, now)}</p>}
       {cal === "connect" && (
         <div className="row between wrap" style={{ gap: 10 }}>
           <p className="small muted">See today&apos;s events here by connecting your Google Calendar.</p>

@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { cache } from "react";
 import { BRAND } from "./brand";
 
 declare global {
@@ -83,11 +84,12 @@ export type Settings = {
   timezone: string;
 };
 
-export async function getSettings(): Promise<Settings | null> {
+/** The Space's settings. Read once per page load and shared (the layout and the page both need them). */
+export const getSettings = cache(async (): Promise<Settings | null> => {
   const rows = await sql<Settings[]>`select artist_name, accent, logo, photo, timezone from settings where id = 1`;
   const s = rows[0];
   if (!s) return null;
   return { ...s, logo: s.logo ?? BRAND.logo };
-}
+});
 
 export const memberCols = sql`id, name, email, phone, role_label, access, avatar, photo, theme, created_at`;

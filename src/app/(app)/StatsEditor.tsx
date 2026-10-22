@@ -21,7 +21,7 @@ export default function StatsEditor({ current, auto = [] }: { current: Record<st
     });
   return (
     <>
-      <button className="btn" onClick={() => setOpen(true)}><I.sparkle style={{ width: 16 }} /> Update stats</button>
+      <button className="btn btn-sm" onClick={() => setOpen(true)}><I.sparkle style={{ width: 15 }} /> Update stats</button>
       <Sheet open={open} onClose={() => setOpen(false)} label="Update stats">
         <h2>Today&apos;s numbers</h2>
         <p className="small muted" style={{ margin: "6px 0 18px" }}>Pop in your latest counts. Your level and growth update instantly.</p>

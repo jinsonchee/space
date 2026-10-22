@@ -18,13 +18,22 @@ import { getTikTok } from "@/lib/tiktok";
 import { when } from "@/lib/when";
 import StatsEditor from "./StatsEditor";
 import GoalEditor from "./GoalEditor";
+import NudgeButton from "./NudgeButton";
+import HomeTasks from "./HomeTasks";
 
-const PACE: Record<GoalProgress["pace"], { label: string; cls: string }> = {
-  ahead: { label: "Ahead of pace", cls: "pace-ahead" },
-  "on-track": { label: "On track", cls: "pace-ok" },
-  behind: { label: "Behind pace", cls: "pace-behind" },
-  done: { label: "Goal smashed", cls: "pace-ahead" },
-};
+const PACE_CLS: Record<GoalProgress["pace"], string> = { ahead: "pace-ahead", "on-track": "pace-ok", behind: "pace-behind", done: "pace-ahead" };
+
+/** Pace in time, not labels: "3 weeks behind", "2 weeks ahead", "On pace". */
+function paceText(g: GoalProgress) {
+  if (g.pace === "done") return "Goal smashed";
+  const total = (Date.parse(g.end_date) - Date.parse(g.start_date)) / 86400000;
+  const off = ((g.pct - g.expected) / 100) * total; // days
+  const d = Math.abs(off);
+  if (d < 4) return "On pace";
+  const amount = d < 10 ? `${Math.round(d)} days` : d < 60 ? `${Math.round(d / 7)} weeks` : `${Math.round(d / 30)} months`;
+  return `${amount} ${off < 0 ? "behind" : "ahead"}`;
+}
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
 function goalDetail(g: GoalProgress) {
   if (g.kind === "metric") {
@@ -55,13 +64,13 @@ export default async function Home() {
   const youtube = getYouTube();
   const instagram = getInstagram();
   const tiktok = getTikTok();
-  const [people, latest, past, myTasks, labels, todos, goals, streak] = await Promise.all([
+  const [people, latest, past, openTasks, labels, todos, goals, streak] = await Promise.all([
     sql<{ id: string; name: string; role_label: string; avatar: AvatarConfig; access: string }[]>`
       select id, name, role_label, avatar, access from members order by case access when 'master' then 0 else 1 end, created_at`,
     sql<{ platform: string; value: string }[]>`select distinct on (platform) platform, value from stats_snapshots order by platform, captured_on desc`,
     sql<{ platform: string; value: string }[]>`
       select distinct on (platform) platform, value from stats_snapshots where captured_on <= ${monthAgo} order by platform, captured_on desc`,
-    getTasks({ assignee: me.id, openOnly: true }),
+    getTasks({ openOnly: true }),
     getLabels(),
     sql<{ scope: string; done: boolean }[]>`
       select scope, done from todos
@@ -89,183 +98,224 @@ export default async function Home() {
   const labelById = Object.fromEntries(labels.map((l) => [l.id, l]));
   const main = goals[0];
   const isAdmin = atLeast(me, "admin");
+  const myTasks = openTasks.filter((t) => t.assignees.includes(me.id));
   const nextGoalTask = main ? myTasks.find((t) => t.goal_id === main.id) : undefined;
+  const others = goals.filter((g) => g !== main);
+
+  // Team status: what each person has on, split by status, and whether anything has slipped. (Tasks come sorted by due date.)
+  const team = crew.map((c) => {
+    const theirs = openTasks.filter((t) => t.assignees.includes(c.id));
+    const by = (st: string) => theirs.filter((t) => t.status === st).length;
+    return { ...c, open: theirs.length, todo: by("todo"), doing: by("doing"), hold: by("hold"), overdue: theirs.filter((t) => t.due_date && t.due_date < today).length, next: theirs[0] };
+  });
+  const teamOverdue = team.reduce((n, c) => n + c.overdue, 0);
+
+  // Her tasks, grouped like a to-do app.
+  const overdue = myTasks.filter((t) => t.due_date && t.due_date < today);
+  const dueToday = myTasks.filter((t) => t.due_date === today);
+  const upcoming = myTasks.filter((t) => !t.due_date || t.due_date > today).slice(0, 4);
+  // The one thing that needs her first.
+  const focus = overdue[0] ?? dueToday.find((t) => t.priority === "high") ?? dueToday[0];
+
+  // One line under the greeting: the day at a glance.
+  const glance = [
+    cal.state === "ok" ? (todayEvents.length ? `${todayEvents.length} event${todayEvents.length === 1 ? "" : "s"}` : "a clear calendar") : null,
+    mail.state === "ok" ? (mail.threads.length ? `${mail.estimate > mail.threads.length ? `${mail.estimate}+` : mail.threads.length} unread email${mail.threads.length === 1 ? "" : "s"}` : "an empty inbox") : null,
+    overdue.length + dueToday.length ? `${overdue.length + dueToday.length} task${overdue.length + dueToday.length === 1 ? "" : "s"} due` : null,
+  ].filter(Boolean);
+  const glanceLine = glance.length ? `You have ${glance.length > 1 ? `${glance.slice(0, -1).join(", ")} and ${glance[glance.length - 1]}` : glance[0]} today.` : "Here's your focus for today.";
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head home-head">
         <div>
           <p className="muted small" style={{ fontWeight: 600 }}>{prettyDay(today)}</p>
           <h1 style={{ marginTop: 4 }}>{greet}, {me.name.split(" ")[0]}</h1>
+          <p className="muted" style={{ marginTop: 6 }}>{glanceLine}</p>
         </div>
-        {isAdmin && <StatsEditor current={now} auto={[...auto]} />}
+        <div className="quick" aria-label="Add">
+          <Link href="/tasks?open=new" className="btn btn-sm"><I.plus style={{ width: 15 }} /> Task</Link>
+          <Link href="/week" className="btn btn-sm"><I.plus style={{ width: 15 }} /> To-do</Link>
+          {mail.state === "ok" && <Link href="/inbox?compose=1" className="btn btn-sm"><I.plus style={{ width: 15 }} /> Email</Link>}
+        </div>
       </div>
 
-      <div className="grid g-hero" style={{ marginBottom: 16 }}>
-        <section className="stage">
-          {artist && <Character config={artist.avatar} size={200} label={`${artist.name}'s character`} />}
-          <div className="col" style={{ gap: 12, minWidth: 0 }}>
-            {main ? (
-              <>
-                <div className="row wrap" style={{ gap: 8 }}>
-                  <span className="eyebrow">{year} goal</span>
-                  <span className={`chip ${PACE[main.pace].cls}`}>{PACE[main.pace].label}</span>
-                  <span className="chip">{main.daysLeft} days left</span>
-                </div>
-                <h2 style={{ fontSize: 26 }}>{main.title}</h2>
-                <div className="row" style={{ alignItems: "baseline", gap: 10 }}>
-                  <span className="level-num">{Math.round(main.pct)}<small style={{ marginLeft: 2 }}>%</small></span>
-                  <span className="small muted">{goalDetail(main)}</span>
-                </div>
-                <GoalBar g={main} big />
-                <div className="row between tiny muted">
-                  <span>{shortDay(main.start_date)}</span>
-                  <span>▲ today&apos;s pace: {Math.round(main.expected)}%</span>
-                  <span>{shortDay(main.end_date)}</span>
-                </div>
-                <div className="hero-stats">
-                  <div><strong>{streak.streak} day{streak.streak === 1 ? "" : "s"}</strong><span>your streak{streak.doneToday ? "" : " · finish one thing today"}</span></div>
-                  <div><strong>{main.weekDone}/{main.weekTotal}</strong><span>goal tasks this week</span></div>
-                  <div className="hide-sm"><strong style={{ fontSize: 14 }}>{nextGoalTask ? nextGoalTask.title : "—"}</strong><span>your next goal task</span></div>
-                </div>
-              </>
-            ) : (
-              <>
-                <span className="eyebrow">{year} goal</span>
-                <h2 style={{ fontSize: 26 }}>What does a great {year} look like?</h2>
-                <p className="muted small">Set a goal for the year — like a listener target or finishing the album — and link tasks to it. Progress here only moves when real work gets done.</p>
-                {isAdmin ? <GoalEditor mode="new" today={today} /> : <p className="small faint">Ask the artist or an admin to set this year&apos;s goal.</p>}
-              </>
-            )}
-          </div>
-        </section>
+      <div className="home">
+        <div className="home-main">
+          {/* The one thing that needs her first */}
+          {focus && (
+            <Link href={`/tasks?open=${focus.id}`} className="focus">
+              <span className="focus-label">{focus.due_date && focus.due_date < today ? "Overdue" : "Due today"}{focus.priority === "high" ? " · Urgent" : ""}</span>
+              <span className="focus-title">{focus.title}</span>
+              <span className="focus-meta">
+                {focus.due_date && focus.due_date < today ? `${daysBetween(focus.due_date, today)} day${daysBetween(focus.due_date, today) === 1 ? "" : "s"} late` : "Finish it today"}
+                <span className="focus-go">Open <I.right style={{ width: 14 }} /></span>
+              </span>
+            </Link>
+          )}
 
-        <section className="card">
-          <div className="card-title">
-            <div>
-              <span className="eyebrow">This week</span>
-              <h2 style={{ marginTop: 4 }}>{week.filter((t) => t.done).length}/{week.length} goals</h2>
+          <section className="sec home-tasks-sec">
+            <div className="sec-head">
+              <h2>Your tasks {myTasks.length > 0 && <span className="sec-count">{myTasks.length} open</span>}</h2>
+              <Link href="/tasks" className="sec-link">All tasks <I.right style={{ width: 14 }} /></Link>
             </div>
-            <div className="ring" style={{ ["--p" as string]: weekPct }}><span>{weekPct}%</span></div>
-          </div>
-          <div className="row between small" style={{ padding: "10px 0", borderTop: "1px solid var(--line)" }}>
-            <span className="muted">Today&apos;s to-dos</span>
-            <strong>{day.filter((t) => t.done).length} / {day.length}</strong>
-          </div>
-          <div className="row between small" style={{ padding: "10px 0", borderTop: "1px solid var(--line)" }}>
-            <span className="muted">Open tasks for you</span>
-            <strong>{myTasks.length}</strong>
-          </div>
-          <Link href="/week" className="btn" style={{ width: "100%", marginTop: 8 }}>Open My Week</Link>
-        </section>
+            <HomeTasks today={today} groups={[
+              { key: "overdue", label: "Overdue", tasks: overdue },
+              { key: "today", label: "Due today", tasks: dueToday },
+              { key: "upcoming", label: "Upcoming", tasks: upcoming },
+            ]} />
+          </section>
+
+          {mailCard && <div className="home-inbox"><InboxCard r={mailCard} times={mailTimes} /></div>}
+        </div>
+
+        <aside className="home-rail">
+          {calState && <TodayCard cal={calState} events={todayEvents} />}
+          <section className="sec home-week">
+            <div className="sec-head">
+              <h2>This week</h2>
+              <Link href="/week" className="sec-link">My Week <I.right style={{ width: 14 }} /></Link>
+            </div>
+            <div className="row" style={{ gap: 14 }}>
+              <div className="ring" style={{ ["--p" as string]: weekPct }}><span>{weekPct}%</span></div>
+              <div className="col" style={{ gap: 2 }}>
+                <span><strong>{week.filter((t) => t.done).length} of {week.length}</strong> <span className="muted">week goals</span></span>
+                <span className="small muted">{day.filter((t) => t.done).length} of {day.length} to-dos today · {streak.streak}-day streak</span>
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
 
-      {(calState || mailCard) && (
-        <div className={`grid ${calState && mailCard ? "g-2" : ""}`} style={{ marginBottom: 16, alignItems: "start" }}>
-          {calState && <TodayCard cal={calState} events={todayEvents} />}
-          {mailCard && <InboxCard r={mailCard} times={mailTimes} />}
-        </div>
-      )}
-
-      {crew.length > 0 && (
-        <section className="card crew" style={{ marginBottom: 16 }}>
-          <div className="card-title">
-            <h2>The crew</h2>
-            <Link href="/team" className="btn btn-sm btn-ghost">Team <I.right style={{ width: 14 }} /></Link>
+      {/* Team status */}
+      {team.length > 0 && (
+        <section className="sec home-team">
+          <div className="sec-head">
+            <h2>Team status {teamOverdue > 0 ? <span className="sec-count overdue">{teamOverdue} overdue</span> : <span className="sec-count">all on time</span>}</h2>
+            <Link href="/team" className="sec-link">Team <I.right style={{ width: 14 }} /></Link>
           </div>
-          <div className="crew-row">
-            {crew.map((c) => (
-              <div key={c.id} className="crew-member">
-                <Character config={c.avatar} size={120} showPet={false} label={`${c.name}'s character`} />
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name}</div>
-                <div className="tiny muted">{c.role_label}</div>
+          <div className="grid g-2" style={{ gap: 10 }}>
+            {team.map((c) => (
+              <div key={c.id} className="team-card">
+                <div className="team-char"><Character config={c.avatar} size={64} showPet={false} label={`${c.name}'s character`} /></div>
+                <div className="grow">
+                  <div className="row between" style={{ gap: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700 }}>{c.name}</div>
+                      <div className="tiny muted">{c.role_label}</div>
+                    </div>
+                    {c.overdue > 0 && c.id !== me.id && <NudgeButton memberId={c.id} name={c.name.split(" ")[0]} />}
+                  </div>
+                  <div className="workbar" title={`${c.todo} to do · ${c.doing} in progress · ${c.hold} on hold`}>
+                    {c.open === 0 ? <span style={{ flex: 1, background: "var(--surface-3)" }} /> : <>
+                      <span style={{ flex: c.doing, background: "var(--tone-progress)" }} />
+                      <span style={{ flex: c.todo, background: "var(--tone-queue)" }} />
+                      <span style={{ flex: c.hold, background: "var(--tone-hold)" }} />
+                    </>}
+                  </div>
+                  <div className="small" style={{ marginTop: 6 }}>
+                    <strong>{c.open}</strong> open{c.doing > 0 && <span className="muted"> · {c.doing} in progress</span>}{c.overdue > 0 && <> · <span className="overdue">{c.overdue} overdue</span></>}
+                  </div>
+                  {c.next && <div className="tiny muted team-next">Next: {c.next.title}</div>}
+                </div>
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {goals.length > 0 && (
-        <section className="card" style={{ marginBottom: 16 }}>
-          <div className="card-title">
-            <h2>{year} goals</h2>
-            {isAdmin && <GoalEditor mode="new" today={today} />}
+      {/* The year's goal, with the character beside it */}
+      <section className="stage" style={{ marginTop: 28 }}>
+        {artist && <div className="stage-char"><Character config={artist.avatar} size={150} label={`${artist.name}'s character`} /></div>}
+        {main ? (
+          <>
+            <div className="stage-head">
+              <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
+                <div className="row wrap" style={{ gap: 8 }}>
+                  <span className="eyebrow">{year} goal</span>
+                  <span className={`chip ${PACE_CLS[main.pace]}`}>{paceText(main)}</span>
+                  <span className="chip">{main.daysLeft} days left</span>
+                </div>
+                {isAdmin && <GoalEditor mode="edit" today={today} goal={main} />}
+              </div>
+              <h2 className="stage-title">{main.title}</h2>
+            </div>
+            <div className="stage-body">
+              <div className="row" style={{ alignItems: "baseline", gap: 10 }}>
+                <span className="level-num">{Math.round(main.pct)}<small style={{ marginLeft: 2 }}>%</small></span>
+                <span className="small muted">{goalDetail(main)}</span>
+              </div>
+              <GoalBar g={main} big />
+              <div className="row between tiny muted">
+                <span>{shortDay(main.start_date)}</span>
+                <span>▲ today&apos;s pace: {Math.round(main.expected)}%</span>
+                <span>{shortDay(main.end_date)}</span>
+              </div>
+              <div className="hero-stats">
+                <div><strong>{main.weekDone}/{main.weekTotal}</strong><span>goal tasks this week</span></div>
+                <div style={{ gridColumn: "span 2" }}><strong style={{ fontSize: 14 }}>{nextGoalTask ? nextGoalTask.title : "—"}</strong><span>your next goal task</span></div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="stage-head col" style={{ gap: 12, gridRow: "1 / span 2" }}>
+            <span className="eyebrow">{year} goal</span>
+            <h2 style={{ fontSize: 26 }}>What does a great {year} look like?</h2>
+            <p className="muted small">Set a goal for the year — like a listener target or finishing the album — and link tasks to it. Progress here only moves when real work gets done.</p>
+            {isAdmin ? <GoalEditor mode="new" today={today} /> : <p className="small faint">Ask the artist or an admin to set this year&apos;s goal.</p>}
           </div>
-          <div className="col" style={{ gap: 14 }}>
-            {goals.map((g) => (
+        )}
+        {main && (others.length > 0 || isAdmin) && (
+          <div className="stage-more">
+            {others.map((g) => (
               <div key={g.id} className="goal-row">
                 <div className="row between wrap" style={{ gap: 8 }}>
-                  <div className="row" style={{ gap: 8, minWidth: 0 }}>
-                    {g.is_primary && <span className="chip chip-accent">Main</span>}
-                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title}</strong>
-                  </div>
+                  <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</strong>
                   <div className="row" style={{ gap: 8 }}>
-                    <span className={`chip ${PACE[g.pace].cls}`}>{PACE[g.pace].label}</span>
+                    <span className={`chip ${PACE_CLS[g.pace]}`}>{paceText(g)}</span>
                     <span className="small" style={{ fontWeight: 700 }}>{Math.round(g.pct)}%</span>
                     {isAdmin && <GoalEditor mode="edit" today={today} goal={g} />}
                   </div>
                 </div>
                 <GoalBar g={g} />
-                <div className="tiny muted">{goalDetail(g)} · {g.daysLeft} days left{g.kind === "metric" && g.tasksTotal ? ` · ${g.tasksDone}/${g.tasksTotal} goal tasks done` : ""}</div>
+                <div className="tiny muted">{goalDetail(g)} · {g.daysLeft} days left</div>
               </div>
             ))}
+            {isAdmin && <GoalEditor mode="new" today={today} />}
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">
+      {/* Numbers */}
+      <section className="sec">
+        <div className="sec-head">
           <h2>Across platforms</h2>
-          <span className="tiny faint">Auto-sync arrives in Phase 2 · manual for now</span>
+          <div className="row" style={{ gap: 6 }}>
+            {isAdmin && <StatsEditor current={now} auto={[...auto]} />}
+            <Link href="/socials" className="sec-link">Post Stats <I.right style={{ width: 14 }} /></Link>
+          </div>
         </div>
-        <div className="grid g-3">
+        <div className="platforms">
           {PLATFORMS.map((p) => {
             const v = now[p.key];
             const t = then[p.key];
             const g = v !== undefined && t ? ((v - t) / t) * 100 : null;
             return (
-              <div key={p.key} className="platform-tile card card-tight" style={{ background: "var(--surface-2)" }}>
-                <div className="row between">
-                  <span className="row" style={{ gap: 10 }}>
-                    <span className="platform-badge" style={{ background: p.color, color: p.key === "tiktok" ? "#000" : "#fff" }}>{p.name[0]}</span>
-                    <span style={{ fontWeight: 600 }}>{p.name}</span>
-                  </span>
+              <div key={p.key} className="platform">
+                <div className="row" style={{ gap: 8 }}>
+                  <span className="platform-badge" style={{ background: p.color, color: p.key === "tiktok" ? "#000" : "#fff", width: 22, height: 22, borderRadius: 6, fontSize: 11 }}>{p.name[0]}</span>
+                  <span className="small" style={{ fontWeight: 600 }}>{p.name}</span>
+                </div>
+                <div className="row" style={{ alignItems: "baseline", gap: 8, marginTop: 6 }}>
+                  <span className="stat-value">{v !== undefined ? compact(v) : "—"}</span>
                   {g !== null && g !== 0 && <span className={g >= 0 ? "trend-up" : "trend-down"}>{g >= 0 ? "+" : ""}{g.toFixed(1)}%</span>}
                 </div>
-                <div className="stat">
-                  <span className="stat-value">{v !== undefined ? compact(v) : "—"}</span>
-                  <span className="tiny muted">{p.metric}{g !== null ? " · 30 days" : ""}{auto.has(p.key) ? " · auto" : ""}</span>
-                </div>
+                <span className="tiny muted">{p.metric}{g !== null ? " · 30 days" : ""}{auto.has(p.key) ? " · auto" : ""}</span>
               </div>
             );
           })}
         </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">
-          <h2>On your plate</h2>
-          <Link href="/tasks" className="btn btn-sm btn-ghost">All tasks <I.right style={{ width: 14 }} /></Link>
-        </div>
-        {myTasks.length === 0 ? (
-          <p className="muted small">Nothing assigned to you right now.</p>
-        ) : (
-          myTasks.slice(0, 6).map((t) => (
-            <Link key={t.id} href={`/tasks?open=${t.id}`} className="task-row" style={{ gridTemplateColumns: "1fr auto" }}>
-              <div style={{ minWidth: 0 }}>
-                <div className="task-title">{t.title}</div>
-                <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
-                  <span className={`tag tag-${t.priority}`} title="Priority">{priorityLabel(t.priority)}</span>
-                  {(t.status === "doing" || t.status === "hold") && <span className={`tag tag-${t.status}`}>{statusLabel(t.status)}</span>}
-                  {t.goal_id && <span className="chip" style={{ color: "var(--accent)" }}>◎ Goal</span>}
-                  {t.labels.map((l) => labelById[l] && <span key={l} className="chip"><span className="dot" style={{ background: labelById[l].color }} />{labelById[l].name}</span>)}
-                </div>
-              </div>
-              {t.due_date && <span className={`small ${t.due_date < today ? "overdue" : "muted"}`}>{t.due_date < today ? "Overdue · " : ""}{t.due_date === today ? "Today" : shortDay(t.due_date)}</span>}
-            </Link>
-          ))
-        )}
-      </div>
+      </section>
     </>
   );
 }

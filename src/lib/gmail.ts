@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { accessToken, calendarConfigured, getConnection, markExpired } from "./google";
+import { accessToken, calendarConfigured, connectionOnce, getConnection, markExpired, tokenOnce } from "./google";
 
 // Gmail for each person's own mailbox: folders, search, read, bulk actions (read/unread, archive,
 // trash, star, labels, spam), compose, reply, forward and drafts. Emails are read live from Google
@@ -35,12 +35,12 @@ const safePath = (path: string) => path.split("?")[0].replace(/\/[0-9a-z_-]{10,}
 
 async function gmail<T>(memberId: string, path: string, init?: RequestInit): Promise<{ ok: true; data: T } | Fail> {
   if (!calendarConfigured()) return { state: "off" };
-  const conn = await getConnection(memberId);
+  const conn = await connectionOnce(memberId);
   if (!conn || !conn.features.includes("gmail")) return { state: "off" };
   if (conn.status === "expired") return { state: "expired" };
   try {
     const call = (token: string) => fetch(`${API}${path}`, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
-    let token = await accessToken(memberId);
+    let token = await tokenOnce(memberId);
     if (!token) return { state: (await getConnection(memberId))?.status === "expired" ? "expired" : "error" };
     let res = await call(token);
     // Gmail says "slow down" with 429, or 403 + a rate-limit reason: wait a moment and retry once.
@@ -123,7 +123,7 @@ export async function listThreads(memberId: string, o: ListOpts = {}): Promise<G
   const ids = list.data.threads?.map((t) => t.id) ?? [];
   const meta = new URLSearchParams({ format: "metadata" });
   ["From", "To", "Subject", "Date"].forEach((h) => meta.append("metadataHeaders", h));
-  const threads = await mapLimit(ids, 6, async (id) => {
+  const threads = await mapLimit(ids, 10, async (id) => { // 10 at once: ~2–3 rounds for a page of 25 (a 429 is retried)
     const t = await gmail<{ messages?: GMessage[] }>(memberId, `/threads/${id}?${meta}`);
     if (!("ok" in t) || !t.data.messages?.length) return null;
     const msgs = t.data.messages;

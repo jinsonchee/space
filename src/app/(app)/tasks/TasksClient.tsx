@@ -29,6 +29,7 @@ export default function TasksClient({ tasks, members, labels, goals, meId, isAdm
   }, []);
   useEffect(() => { try { localStorage.setItem("space_task_view", view); } catch {} }, [view]);
   useEffect(() => {
+    if (openId === "new") return setEditing("new"); // Home → "+ Task"
     if (openId) {
       const t = tasks.find((x) => x.id === openId);
       if (t) setEditing(t);

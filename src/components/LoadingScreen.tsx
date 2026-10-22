@@ -4,9 +4,16 @@ import { Pet } from "./Pixel";
 import { ArtistLogo } from "./Photo";
 import type { PetKind } from "@/lib/sprites";
 
-/** "Welcome back rockstar" — shown once per browser session when the app opens. */
+// Runs before the first paint: if this session has already seen the loader, hide it instantly (no flash).
+const SKIP = `try{if(sessionStorage.getItem("space_loaded")==="1")document.documentElement.setAttribute("data-loaded","")}catch(e){}`;
+
+/**
+ * "Welcome back rockstar" — shown once per browser session when the app opens.
+ * It's part of the first HTML the server sends, so it covers the app from the very first frame
+ * (before, it only appeared after the app had already flashed up).
+ */
 export function LoadingScreen({ logo, artist, pet }: { logo: string | null; artist: string; pet?: PetKind }) {
-  const [show, setShow] = useState<boolean | null>(null);
+  const [show, setShow] = useState(true);
   const [pct, setPct] = useState(0);
   const [done, setDone] = useState(false);
 
@@ -15,16 +22,19 @@ export function LoadingScreen({ logo, artist, pet }: { logo: string | null; arti
     try { seen = sessionStorage.getItem("space_loaded") === "1"; } catch {}
     setShow(!seen);
     if (seen) return;
-    const steps = [18, 42, 63, 81, 100];
-    const timers = steps.map((p, i) => setTimeout(() => setPct(p), 220 + i * 330));
-    timers.push(setTimeout(() => setDone(true), 2200));
-    timers.push(setTimeout(() => { setShow(false); try { sessionStorage.setItem("space_loaded", "1"); } catch {} }, 2750));
+    // About 1.2 seconds end to end: quick enough to open every time from the Home Screen.
+    const steps = [24, 52, 78, 100];
+    const timers = steps.map((p, i) => setTimeout(() => setPct(p), 80 + i * 180));
+    timers.push(setTimeout(() => setDone(true), 900));
+    timers.push(setTimeout(() => { setShow(false); try { sessionStorage.setItem("space_loaded", "1"); } catch {} }, 1200));
     return () => timers.forEach(clearTimeout);
   }, []);
 
   if (!show) return null;
   const status = pct < 40 ? "Tuning the guitars…" : pct < 80 ? "Warming up the crowd…" : pct < 100 ? "Checking the mic…" : "You're on!";
   return (
+    <>
+    <script dangerouslySetInnerHTML={{ __html: SKIP }} />
     <div className={`loader ${done ? "done" : ""}`} role="status" aria-live="polite">
       <div className="loader-pet"><Pet kind={pet} size={64} /></div>
       <div className="loader-inner">
@@ -36,5 +46,6 @@ export function LoadingScreen({ logo, artist, pet }: { logo: string | null; arti
         <p className="small muted">{status}</p>
       </div>
     </div>
+    </>
   );
 }

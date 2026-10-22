@@ -123,16 +123,17 @@ export async function syncVideos(channelId: string) {
   const today = todayIn(s!.timezone);
   let saved = 0;
   for (let i = 0; i < ids.length; i += 50) {
-    const r = await yt<{ items?: { id: string; snippet: { title: string; publishedAt: string; thumbnails?: Record<string, { url: string }> }; statistics: { viewCount?: string; likeCount?: string; commentCount?: string }; contentDetails: { duration?: string } }[] }>(
+    const r = await yt<{ items?: { id: string; snippet: { title: string; description?: string; publishedAt: string; thumbnails?: Record<string, { url: string }> }; statistics: { viewCount?: string; likeCount?: string; commentCount?: string }; contentDetails: { duration?: string } }[] }>(
       "videos", { part: "snippet,statistics,contentDetails", id: ids.slice(i, i + 50).join(",") });
     for (const v of r?.items ?? []) {
       const th = v.snippet.thumbnails;
       const thumb = (th?.medium ?? th?.high ?? th?.default)?.url ?? null;
-      const short = await isShort(v.id, seconds(v.contentDetails.duration));
+      const secs = seconds(v.contentDetails.duration);
+      const short = await isShort(v.id, secs);
       await sql`
-        insert into posts (platform, post_id, title, url, thumbnail, kind, published_at)
-        values ('youtube', ${v.id}, ${v.snippet.title}, ${`https://www.youtube.com/${short ? "shorts/" : "watch?v="}${v.id}`}, ${thumb}, ${short ? "short" : "video"}, ${v.snippet.publishedAt})
-        on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, kind = excluded.kind, published_at = excluded.published_at`;
+        insert into posts (platform, post_id, title, url, thumbnail, kind, published_at, caption, duration_s)
+        values ('youtube', ${v.id}, ${v.snippet.title}, ${`https://www.youtube.com/${short ? "shorts/" : "watch?v="}${v.id}`}, ${thumb}, ${short ? "short" : "video"}, ${v.snippet.publishedAt}, ${(v.snippet.description ?? "").slice(0, 1000)}, ${secs || null})
+        on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, kind = excluded.kind, published_at = excluded.published_at, caption = excluded.caption, duration_s = excluded.duration_s`;
       const st = v.statistics;
       await sql`
         insert into post_snapshots (platform, post_id, captured_on, views, likes, comments)

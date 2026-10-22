@@ -60,6 +60,14 @@ export function PetDock({ pet, petName }: { pet?: PetKind; petName: string }) {
     return () => clearTimeout(t);
   }, [peek]);
 
+  // Phone: the top bar's bell toggles the list, and shows the unread count we report.
+  useEffect(() => {
+    const t = () => { setOpen((o) => !o); setPeek(null); };
+    window.addEventListener("space:toggle-notes", t);
+    return () => window.removeEventListener("space:toggle-notes", t);
+  }, []);
+  useEffect(() => { window.dispatchEvent(new CustomEvent("space:unread", { detail: unread })); }, [unread]);
+
   const markAll = async () => {
     await fetch("/api/notifications", { method: "POST", body: "{}" });
     setUnread(0);
@@ -108,6 +116,7 @@ export function PetDock({ pet, petName }: { pet?: PetKind; petName: string }) {
         </motion.div>
       ) : null}
       </AnimatePresence>
+      {/* Laptop: the dove in the corner. Phone: the bell in the top bar (Shell.tsx) opens this same list. */}
       <button className="pet-button" onClick={() => { setOpen((o) => !o); setPeek(null); }} aria-label={`${petName}: ${unread} new notifications`}>
         <Pet kind={pet} size={60} />
         {unread > 0 && <span className="pet-badge">{unread > 9 ? "9+" : unread}</span>}

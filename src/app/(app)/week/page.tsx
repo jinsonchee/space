@@ -1,6 +1,6 @@
 import { requireMember } from "@/lib/auth";
 import { sql, getSettings } from "@/lib/db";
-import { todayIn, mondayOf, addDays, isIsoDate, localHourAndDay } from "@/lib/dates";
+import { todayIn, mondayOf, addDays, isIsoDate, localHourAndDay, tzOffset } from "@/lib/dates";
 import { eventsBetween, eventsOn, type CalEvent } from "@/lib/google";
 import WeekClient, { type Todo } from "./WeekClient";
 
@@ -24,5 +24,7 @@ export default async function WeekPage({ searchParams }: { searchParams: Promise
   const cal = await calendar;
   const events: Record<string, CalEvent[]> = {};
   if (cal.state === "ok") for (let i = 0; i < 7; i++) events[addDays(monday, i)] = eventsOn(cal.events, addDays(monday, i), s.timezone);
-  return <WeekClient todos={todos} today={today} day={day} monday={monday} isWeekend={weekday === "Sat" || weekday === "Sun"} events={cal.state === "ok" ? events : null} calExpired={cal.state === "expired"} />;
+  // When each day starts in the Space's timezone, so the calendar can place events on the right hour.
+  const dayStarts = Object.fromEntries(Array.from({ length: 8 }, (_, i) => { const d = addDays(monday, i); return [d, Date.parse(`${d}T00:00:00${tzOffset(s.timezone, d)}`)]; }));
+  return <WeekClient dayStarts={dayStarts} allEvents={cal.state === "ok" ? cal.events : null} todos={todos} today={today} day={day} monday={monday} isWeekend={weekday === "Sat" || weekday === "Sun"} events={cal.state === "ok" ? events : null} calExpired={cal.state === "expired"} />;
 }

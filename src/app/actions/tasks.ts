@@ -1,9 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { sql, transaction } from "@/lib/db";
+import { sql, transaction, getSettings } from "@/lib/db";
 import { requireMember, atLeast } from "@/lib/auth";
 import { notify } from "@/lib/notify";
-import { isIsoDate } from "@/lib/dates";
+import { isIsoDate, todayIn } from "@/lib/dates";
 import { isHex } from "@/lib/color";
 import type { TaskStatus, TaskPriority } from "@/lib/task-meta";
 
@@ -129,6 +129,31 @@ export async function nudgeTask(id: string, channel: "app" | "email" | "both" = 
   }
   if (!sent) return { ok: false as const, error: "Already nudged recently — give them a few hours." };
   return { ok: true as const, sent };
+}
+
+/** One reminder to a teammate about everything of theirs that's overdue (Home → Team status). */
+export async function nudgeMember(memberId: string) {
+  const me = await requireMember();
+  if (!uuidRe.test(memberId)) return { ok: false as const, error: "Bad member" };
+  if (memberId === me.id) return { ok: false as const, error: "That's you!" };
+  const today = todayIn((await getSettings())!.timezone);
+  const late = await sql<{ title: string }[]>`
+    select t.title from tasks t join task_assignees a on a.task_id = t.id
+    where a.member_id = ${memberId} and t.status <> 'done' and t.due_date < ${today}
+    order by t.due_date limit 5`;
+  if (!late.length) return { ok: false as const, error: "Nothing of theirs is overdue." };
+  const window = Math.floor(Date.now() / (6 * 3600 * 1000));
+  const ok = await notify({
+    memberId,
+    kind: "nudge",
+    title: `Friendly nudge from ${me.name.split(" ")[0]} 👋`,
+    body: `${late.length === 1 ? "This is" : "These are"} past due:\n${late.map((t) => `• ${t.title}`).join("\n")}`,
+    link: "/tasks",
+    dedupeKey: `nudge-member:${memberId}:${window}`,
+    email: true,
+  });
+  if (!ok) return { ok: false as const, error: "Already nudged recently. Give them a few hours." };
+  return { ok: true as const };
 }
 
 export async function createLabel(name: string, color: string) {

@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Attachment, GLabel, Message } from "@/lib/gmail";
@@ -9,7 +9,8 @@ import { AnimatePresence } from "motion/react";
 import { TaskModal } from "../../tasks/TaskModal";
 import { Sheet } from "@/components/Sheet";
 import { Composer, esc, kb, type ComposeInit } from "../Composer";
-import { UNDO_KEY } from "../InboxClient";
+import { UNDO_KEY, ORDER_KEY } from "../InboxClient";
+import { tint, initial } from "@/lib/tint";
 import { I } from "@/components/Icons";
 import { PREVIEWABLE } from "@/lib/preview";
 
@@ -37,6 +38,18 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
   const inTrash = threadLabels.includes("TRASH");
   const inSpam = threadLabels.includes("SPAM");
   const inInbox = threadLabels.includes("INBOX");
+
+  // Up/down: step through the list she came from (saved by the Inbox page).
+  const [nav, setNav] = useState<{ prev?: string; next?: string }>({});
+  useEffect(() => {
+    try {
+      const ids: string[] = JSON.parse(sessionStorage.getItem(ORDER_KEY) ?? "[]");
+      const i = ids.indexOf(threadId);
+      if (i >= 0) setNav({ prev: ids[i - 1], next: ids[i + 1] });
+    } catch {}
+  }, [threadId]);
+  const nameOf = (addr: string) => (addrEmail(addr) === me ? "You" : addr.replace(/<[^>]*>/, "").replace(/"/g, "").trim() || addrEmail(addr));
+  const toLine = (m: Msg) => { const to = splitAddrs(m.to); return to.length ? `to ${to.slice(0, 2).map(nameOf).join(", ")}${to.length > 2 ? ` +${to.length - 2}` : ""}` : ""; };
 
   // Who a reply goes to: the sender (or Reply-To); if I sent the last one, the people I wrote to.
   const recipients = (all: boolean) => {
@@ -80,48 +93,53 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
 
   return (
     <>
-      <div className="page-head" style={{ alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <Link href="/inbox" className="btn btn-sm btn-ghost" style={{ marginBottom: 8 }}><I.left style={{ width: 16 }} /> Inbox</Link>
-          <h1 style={{ fontSize: 26 }}>{subject}</h1>
+      <div className="thread-top">
+        <Link href="/inbox" className="sec-link thread-back hide-sm"><I.left style={{ width: 16 }} /> Inbox</Link>
+        <Link href="/inbox" className="ibtn only-sm" aria-label="Back to Inbox"><I.left /></Link>
+        <span className="thread-nav">
+          {nav.prev ? <Link className="ibtn" href={`/inbox/${nav.prev}`} aria-label="Previous email" title="Previous email"><I.up /></Link> : <span className="ibtn" aria-disabled><I.up /></span>}
+          {nav.next ? <Link className="ibtn" href={`/inbox/${nav.next}`} aria-label="Next email" title="Next email"><I.down /></Link> : <span className="ibtn" aria-disabled><I.down /></span>}
+        </span>
+        <span style={{ flex: 1 }} />
+        <div className="thread-actions">
+          {inTrash ? <button className="ibtn" disabled={pending} onClick={() => act("untrash")} title="Restore" aria-label="Restore"><I.inbox /></button> : <>
+            {inInbox ? <button className="ibtn" disabled={pending} onClick={() => act("archive")} title="Archive" aria-label="Archive"><I.archive /></button> : !inSpam && <button className="ibtn" disabled={pending} onClick={() => act("inbox")} title="Move to Inbox" aria-label="Move to Inbox"><I.inbox /></button>}
+            <button className="ibtn" disabled={pending} onClick={() => act("trash")} title="Delete" aria-label="Delete"><I.trash /></button>
+          </>}
+          <button className="ibtn" disabled={pending} onClick={() => act("unread")} title="Mark unread" aria-label="Mark unread"><I.mail /></button>
+          <button className={`ibtn ${starred ? "on" : ""}`} disabled={pending} onClick={() => act(starred ? "unstar" : "star")} title={starred ? "Starred" : "Star"} aria-label={starred ? "Unstar" : "Star"}><I.star filled={starred} /></button>
+          {inSpam ? <button className="ibtn" disabled={pending} onClick={() => act("notspam")} title="Not spam" aria-label="Not spam"><I.inbox /></button> : !inTrash && <button className="ibtn hide-sm" disabled={pending} onClick={() => act("spam")} title="Report spam" aria-label="Report spam"><I.spam /></button>}
+          {mailLabels.length > 0 && (
+            <select className="select inbox-move" value="" aria-label="Move to label" disabled={pending} onChange={(e) => e.target.value && act(`label:${e.target.value}`)}>
+              <option value="">Move to…</option>
+              {mailLabels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          )}
+          <button className="btn btn-sm hide-sm" onClick={() => setTask(true)}><I.tasks style={{ width: 15 }} /> Make a task</button>
+          <button className="ibtn only-sm" onClick={() => setTask(true)} aria-label="Make a task" title="Make a task"><I.tasks /></button>
+          <a className="ibtn hide-sm" href={gmailUrl} target="_blank" rel="noreferrer" title="Open in Gmail" aria-label="Open in Gmail"><I.external /></a>
         </div>
       </div>
 
-      <div className="card mail-toolbar" style={{ marginBottom: 12, flexWrap: "wrap", gap: 6, borderBottom: 0 }}>
-        {inTrash ? <button className="btn btn-sm" disabled={pending} onClick={() => act("untrash")}>Restore</button> : <>
-          {inInbox ? <button className="btn btn-sm" disabled={pending} onClick={() => act("archive")}>Archive</button> : !inSpam && <button className="btn btn-sm" disabled={pending} onClick={() => act("inbox")}>Move to Inbox</button>}
-          <button className="btn btn-sm" disabled={pending} onClick={() => act("trash")}><I.trash style={{ width: 14 }} /> Delete</button>
-        </>}
-        <button className="btn btn-sm" disabled={pending} onClick={() => act("unread")}>Mark unread</button>
-        <button className="btn btn-sm" disabled={pending} onClick={() => act(starred ? "unstar" : "star")}>{starred ? "★ Starred" : "☆ Star"}</button>
-        {mailLabels.length > 0 && (
-          <select className="select" style={{ height: 32, width: "auto", padding: "0 10px" }} value="" aria-label="Move to label" disabled={pending} onChange={(e) => e.target.value && act(`label:${e.target.value}`)}>
-            <option value="">Move to…</option>
-            {mailLabels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-        )}
-        {inSpam ? <button className="btn btn-sm" disabled={pending} onClick={() => act("notspam")}>Not spam</button> : !inTrash && <button className="btn btn-sm" disabled={pending} onClick={() => act("spam")}>Spam</button>}
-        <span style={{ flex: 1 }} />
-        <button className="btn btn-sm" onClick={() => setTask(true)}><I.tasks style={{ width: 15 }} /> Make a task</button>
-        <a className="btn btn-sm btn-ghost" href={gmailUrl} target="_blank" rel="noreferrer">Open in Gmail</a>
-      </div>
+      <div className="thread">
+      <h1 className="thread-subject">{subject}</h1>
       {note && <p className="small" style={{ color: note.bad ? "var(--danger)" : "var(--success)", marginBottom: 12 }}>{note.t}</p>}
 
       {sent.map((m) => {
         const isOpen = open.has(m.id);
+        const who = addrEmail(m.fromEmail) === me ? "You" : m.from;
         return (
-          <section key={m.id} className="card mail-msg">
-            <button className="row between" style={{ width: "100%", background: "none", border: 0, padding: 0, color: "inherit", cursor: "pointer", textAlign: "left", gap: 10 }}
-              onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; })} aria-expanded={isOpen}>
-              <span style={{ minWidth: 0 }}>
-                <strong>{m.from}</strong> <span className="small muted">&lt;{m.fromEmail}&gt;</span>
-                {!isOpen && <span className="small muted" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.text.slice(0, 140)}</span>}
+          <section key={m.id} className={`msg ${isOpen ? "open" : ""}`}>
+            <button className="msg-head" onClick={() => setOpen((o) => { const n = new Set(o); if (n.has(m.id)) n.delete(m.id); else n.add(m.id); return n; })} aria-expanded={isOpen}>
+              <span className="mrow-av" style={{ background: tint(m.from) }} aria-hidden>{initial(m.from)}</span>
+              <span className="msg-who">
+                <span><strong>{who}</strong> <span className="small muted">{isOpen ? toLine(m) : ""}</span></span>
+                {isOpen ? <span className="tiny muted">{m.fromEmail}{m.cc ? ` · Cc: ${m.cc}` : ""}</span> : <span className="small muted msg-peek">{m.text.slice(0, 160)}</span>}
               </span>
-              <span className="small muted" style={{ whiteSpace: "nowrap" }}>{m.when}</span>
+              <span className="small muted msg-when">{m.when}</span>
             </button>
             {isOpen && (
-              <div style={{ marginTop: 12 }}>
-                {m.to && <p className="tiny muted" style={{ marginBottom: 10 }}>To: {m.to}{m.cc ? ` · Cc: ${m.cc}` : ""}</p>}
+              <div className="msg-body">
                 {m.html ? <MailFrame html={m.html} /> : <div className="mail-text">{m.text}</div>}
                 {m.attachments.length > 0 && (
                   <div className="mail-attach">
@@ -139,7 +157,7 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
       })}
 
       {drafts.map((d) => compose?.draftId === d.draftId ? null : (
-        <section key={d.id} className="card mail-msg" style={{ borderStyle: "dashed" }}>
+        <section key={d.id} className="msg msg-draft">
           <div className="row between wrap" style={{ gap: 10 }}>
             <span className="small"><strong style={{ color: "var(--danger)" }}>Draft</strong> <span className="muted">{d.text.slice(0, 120) || "(empty)"}</span></span>
             <div className="row" style={{ gap: 6 }}>
@@ -161,12 +179,13 @@ export default function ThreadClient({ threadId, subject, messages, threadLabels
             onSent={(t) => { setCompose(null); setNote({ t }); }}
           />
         ) : sent.length > 0 && (
-          <div className="row wrap" style={{ gap: 8 }}>
-            <button className="btn btn-accent" onClick={() => setCompose(replyInit(false))}>Reply</button>
+          <div className="thread-reply">
+            <button className="btn btn-accent" onClick={() => setCompose(replyInit(false))}><I.reply style={{ width: 15 }} /> Reply</button>
             {(splitAddrs(last.to).length + splitAddrs(last.cc).length > 1) && <button className="btn" onClick={() => setCompose(replyInit(true))}>Reply all</button>}
-            <button className="btn" onClick={() => setCompose(forwardInit())}>Forward</button>
+            <button className="btn" onClick={() => setCompose(forwardInit())}><I.forward style={{ width: 15 }} /> Forward</button>
           </div>
         )}
+      </div>
       </div>
 
       <Sheet open={!!preview} onClose={() => setPreview(null)} label={preview?.filename ?? "Attachment"} width={preview?.mimeType === "application/pdf" ? "min(960px, 100%)" : "min(820px, 100%)"}>

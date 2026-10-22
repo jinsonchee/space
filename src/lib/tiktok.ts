@@ -67,7 +67,7 @@ async function markExpired(a: TtAccount) {
   if (artist) await notify({ memberId: artist.id, kind: "tiktok", title: "Reconnect TikTok 🎵", body: "TikTok stopped sharing your stats with Space. Reconnect it in Settings (10 seconds).", link: "/settings#tiktok", dedupeKey: `tiktok-expired:${a.connected_at}` });
 }
 
-type Video = { id: string; title?: string; video_description?: string; create_time?: number; cover_image_url?: string; share_url?: string; view_count?: number; like_count?: number; comment_count?: number; share_count?: number };
+type Video = { id: string; duration?: number; title?: string; video_description?: string; create_time?: number; cover_image_url?: string; share_url?: string; view_count?: number; like_count?: number; comment_count?: number; share_count?: number };
 
 /** Daily: renew tokens, save followers for Home, and every recent video's numbers. */
 export async function syncTikTok() {
@@ -100,7 +100,7 @@ export async function syncTikTok() {
   let cursor: number | undefined;
   for (let page = 0; page < 5; page++) {
     const r = await api<{ videos?: Video[]; cursor?: number; has_more?: boolean }>(
-      "/video/list/?fields=id,title,video_description,create_time,cover_image_url,share_url,view_count,like_count,comment_count,share_count", token,
+      "/video/list/?fields=id,title,video_description,create_time,cover_image_url,share_url,duration,view_count,like_count,comment_count,share_count", token,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ max_count: 20, ...(cursor ? { cursor } : {}) }) });
     if (!r.ok) break;
     videos.push(...(r.data?.videos ?? []));
@@ -110,9 +110,9 @@ export async function syncTikTok() {
   for (const v of videos) {
     const title = (v.title || v.video_description || "").split("\n")[0].slice(0, 140) || "TikTok video";
     await sql`
-      insert into posts (platform, post_id, title, url, thumbnail, kind, published_at)
-      values ('tiktok', ${v.id}, ${title}, ${v.share_url ?? null}, ${v.cover_image_url ?? null}, 'video', ${v.create_time ? new Date(v.create_time * 1000) : null})
-      on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail`;
+      insert into posts (platform, post_id, title, url, thumbnail, kind, published_at, caption, duration_s)
+      values ('tiktok', ${v.id}, ${title}, ${v.share_url ?? null}, ${v.cover_image_url ?? null}, 'video', ${v.create_time ? new Date(v.create_time * 1000) : null}, ${(v.video_description || v.title || "").slice(0, 1000)}, ${v.duration ?? null})
+      on conflict (platform, post_id) do update set title = excluded.title, url = excluded.url, thumbnail = excluded.thumbnail, caption = excluded.caption, duration_s = excluded.duration_s`;
     await sql`
       insert into post_snapshots (platform, post_id, captured_on, views, likes, comments, shares)
       values ('tiktok', ${v.id}, ${today}, ${v.view_count ?? null}, ${v.like_count ?? null}, ${v.comment_count ?? null}, ${v.share_count ?? null})
